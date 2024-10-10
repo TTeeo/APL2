@@ -1,0 +1,15 @@
+¿Quién ganó la Copa del Mundo de la FIFA en 2014?,2,Brasil,Alemania,Argentina
+¿Qué equipo tiene más títulos de la UEFA Champions League?,2,AC Milan,Real Madrid,Barcelona
+¿Quién es conocido como "La Pulga" en el fútbol?,2,Cristiano Ronaldo,Lionel Messi,Neymar
+¿En qué país se celebró la Copa del Mundo de 2010?,2,Italia,Sudafrica,Japon
+¿Cuál es el club más antiguo del mundo?,2,Manchester United,Sheffield FC,Liverpool
+¿Quién es el máximo goleador de la historia de la UEFA Champions League?,2,Lionel Messi,Cristiano Ronaldo,Raúl
+¿Qué país ganó la Eurocopa en 2016?,2,Francia,Portugal,Alemania
+¿Quién fue el primer jugador en ganar cinco Balones de Oro?,1,Lionel Messi,Cristiano Ronaldo,Johan Cruyff
+¿Qué equipo es conocido como "Los Merengues"?,2,Barcelona,Real Madrid,Atlético de Madrid
+¿Qué selección nacional tiene más títulos de la Copa América?,1,Argentina,Brasil,Uruguay
+¿Quién es el jugador con más partidos jugados en la historia de la Premier League?,1,Gareth Barry,Frank Lampard,Steven Gerrard
+¿Qué club ganó la primera edición de la UEFA Champions League en 1956?,1,Real Madrid,AC Milan,Bayern Múnich
+¿Quién es el entrenador con más títulos en la historia del fútbol?,1,Alex Ferguson,Pep Guardiola,Carlo Ancelotti
+¿Qué país es sede de la Copa del Mundo de 2022?,1,Qatar,Rusia,Brasil
+¿Quién es el futbolista más caro del mundo en la actualidad?,3,Philippe Coutinho,Neymar,Kylian Mbappé
