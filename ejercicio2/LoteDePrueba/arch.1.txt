@@ -1,0 +1,3 @@
+Soy la cadena
+ahora no
+ahora si Soy la cadena a buscar

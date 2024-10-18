@@ -25,10 +25,10 @@ int main(int argc, const char *argv[]) {
     Servidor servidor(parametros.getCantidadUsuarios(),
                       parametros.getCantidadPreguntas());
     servidor.crearSocket(parametros.getPuerto());
-    cout << "PID: " << getpid() << endl;
+    cout << "Servidor iniciado. Para finalizarlo usa 'kill -SIGUSR1 " << getpid() << "'." << endl;
 
     while (true) {
-      cout << "Sala iniciada." << endl;
+      cout << "\nSala iniciada, esperando jugadores..." << endl;
       // 4. Cargar preguntas al servidor
       servidor.cargarPreguntas(archivo.getPreguntas());
 

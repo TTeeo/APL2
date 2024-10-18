@@ -12,7 +12,8 @@ int main(int argc, char *argv[]) {
     Cliente cliente(parametros.getNickname());
 
     cliente.crearSocket(parametros.getServidorIp(), parametros.getPuerto());
-    cout << "PID: " << getpid() << endl;
+    cout << "Para finalizar el cliente usa 'kill -SIGUSR1 26177 " << getpid() << "'." << endl;
+    cout << "\nSe ha ingresado a la sala, cuando haya suficientes jugadores se iniciara el juego." << endl;
 
     while (!cliente.juegoListoParaIniciar()) {
     }

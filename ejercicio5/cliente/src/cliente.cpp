@@ -5,6 +5,7 @@ Cliente *Cliente::instanciaCliente = nullptr;
 Cliente::Cliente(string nombre) : nickname(nombre) {
   instanciaCliente = this;
   signal(SIGINT, SIG_IGN);
+  signal(SIGTERM, SIG_IGN);
   signal(SIGUSR1, Cliente::manejadorFinCliente);
 }
 
@@ -25,6 +26,7 @@ void Cliente::crearSocket(string ip, int puerto) {
     close(descriptorSocket);
     throw runtime_error("No se pudo conectar con el servidor.");
   }
+
 
   cout << "Conectado al servidor." << std::endl;
 }
@@ -81,7 +83,7 @@ void Cliente::jugar() {
   strcpy(buffer, nickname.c_str());
 
   if (send(descriptorSocket, buffer, TAM_NICKNAME, 0) == -1) {
-    throw runtime_error("Error: No se pudo enviar el nickname " + nickname);
+    throw runtime_error("Error: No se pudo enviar el nickname." + nickname);
   }
   MensajeServidor msjServidor;
   int respuesta, bytesRecibidos;
@@ -135,7 +137,7 @@ void Cliente::jugar() {
     }
     cout << string(81, '-') << endl;
     cout << (clienteGano ? "\nFelicidades, has ganado!!"
-                         : "\nTienes que mejorar más, has perdido!! ")
+                         : "\nTienes que mejorar más!! Has perdido.")
          << "\n\nLa partida ha finalizado!! Gracias por jugar con nosotros.\n"
          << endl;
   } else {

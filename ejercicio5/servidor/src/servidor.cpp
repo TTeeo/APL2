@@ -17,6 +17,7 @@ Servidor::Servidor(int cantJugadores, int cantPreguntas)
   }
   instanciaServidor = this;
   signal(SIGINT, SIG_IGN);
+  signal(SIGTERM, SIG_IGN);
   signal(SIGUSR1, Servidor::manejadorFinDeServidor);
 }
 
@@ -174,7 +175,7 @@ void Servidor::jugar() {
     hilosClientes.emplace_back(
         [this, sockCliente]() { manejadorCliente(sockCliente); });
   }
-  cout << "Todos los clientes estan funcionando " << endl;
+  cout << "Sala llena, iniciando juego..." << endl;
   for (thread &hilo : hilosClientes) {
     if (hilo.joinable()) {
       hilo.join();
