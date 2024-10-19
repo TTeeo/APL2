@@ -123,21 +123,33 @@ void Servidor::enviarPregunta(int sockCliente, MensajeServidor &msjServidor,
 }
 
 void Servidor::aceptarConexionNueva() {
-  struct sockaddr_in direccionCliente;
-  socklen_t tamDireccionCliente =
-      sizeof(direccionCliente); // No puedo pasar directamente el
-                                // sizeof(direccionCliente) en accept
-  int socketCliente =
-      accept(socketServidor, (struct sockaddr *)&direccionCliente,
-             &tamDireccionCliente);
-  if (socketCliente == -1) {
-    if (errno == EBADF) {
-      throw runtime_error("El servidor se cerro inesperadamente.");
-    } else {
-      throw runtime_error("Error al aceptar la conexión: " +
-                          string(strerror(errno)));
+
+  int socketCliente;
+  do {
+    struct sockaddr_in direccionCliente;
+    socklen_t tamDireccionCliente =
+        sizeof(direccionCliente); // No puedo pasar directamente el
+                                  // sizeof(direccionCliente) en accept
+    socketCliente = accept(socketServidor, (struct sockaddr *)&direccionCliente,
+                           &tamDireccionCliente);
+    if (socketCliente == -1) {
+      if (errno == EBADF) {
+        throw runtime_error("El servidor se cerro inesperadamente.");
+      } else {
+        throw runtime_error("Error al aceptar la conexión: " +
+                            string(strerror(errno)));
+      }
     }
-  }
+    if (cantidadJugadoresConectados == cantJugadoresMaximo) {
+      close(socketCliente);
+      bool barrera = true;
+      send(socketCliente, &barrera, sizeof(bool), 0);
+    }
+  } while (cantidadJugadoresConectados == cantJugadoresMaximo);
+
+  bool barrera = false;
+  send(socketCliente, &barrera, sizeof(bool), 0);
+
   string nicknameCliente = obtenerNicknameCliente(socketCliente);
   char mensaje[TAM_MSJ_SERVIDOR];
 
@@ -328,11 +340,34 @@ void Servidor::manejadorFinDeServidor(int signo) {
   }
 }
 
-void Servidor::confirmarPartida() const {
+void Servidor::confirmarPartida() {
 
   bool confimarCliente = true;
   for (const auto &sock : socketsClientes) {
     send(sock, &confimarCliente, sizeof(bool), 0);
+  }
+  rechazarClientes = thread(&Servidor::aceptarConexionNueva, this);
+}
+
+void Servidor::rechazarConexiones() {
+  struct sockaddr_in direccionCliente;
+  socklen_t tamDireccionCliente =
+      sizeof(direccionCliente); // No puedo pasar directamente el
+                                // sizeof(direccionCliente) en accept
+
+  while (cantidadJugadoresConectados == cantJugadoresMaximo) {
+    int socketCliente =
+        accept(socketServidor, (struct sockaddr *)&direccionCliente,
+               &tamDireccionCliente);
+    if (socketCliente == -1) {
+      if (errno == EBADF) {
+        throw runtime_error("El servidor se cerro inesperadamente.");
+      } else {
+        throw runtime_error("Error al aceptar la conexión: " +
+                            string(strerror(errno)));
+      }
+    }
+    close(socketCliente);
   }
 }
 
@@ -347,6 +382,7 @@ void Servidor::reiniciar() {
   socketClienteNickname.clear();
   preguntasSeleccionadas.clear();
   hilosClientes.clear();
+  rechazarClientes.join();
 }
 
 /*

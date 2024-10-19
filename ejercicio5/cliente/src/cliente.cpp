@@ -26,6 +26,16 @@ void Cliente::crearSocket(string ip, int puerto, string nickname) {
     close(descriptorSocket);
     throw runtime_error("No se pudo conectar con el servidor.");
   }
+
+  bool barrera = false;
+  cout << "Hola " << endl;
+  recv(descriptorSocket, &barrera, sizeof(bool), 0);
+  cout << "Hola " << endl;
+  if (barrera) {
+    close(descriptorSocket);
+    throw runtime_error("La partida ya esta empezada.");
+  }
+
   char nicknameChr[nickname.length() + 1];
   strcpy(nicknameChr, nickname.c_str());
 

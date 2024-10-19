@@ -38,6 +38,7 @@ private:
   vector<Pregunta> preguntasSeleccionadas;
   map<string, int> puntajes;
   map<int, string> socketClienteNickname;
+  thread rechazarClientes;
   static Servidor *instanciaServidor;
 
   void manejadorCliente(int sockCliente);
@@ -49,6 +50,7 @@ private:
   string obtenerNickname(const char *const buffer) const;
   int elegirPreguntaRandom(const vector<Pregunta> &preguntas) const;
   string obtenerNicknameCliente(int socketCliente) const;
+  void rechazarConexiones();
   bool nicknameDuplicado(const string &nicknameCliente) const;
 
 public:
@@ -67,7 +69,7 @@ public:
   void cargarPreguntas(const string nombreArchivo);
   void enviarResultados() const;
   void liberarRecursos() const;
-  void confirmarPartida() const;
+  void confirmarPartida();
   void reiniciar();
   // void mostrarJugadoresConectados() const;
   int getCantJugadores() { return cantidadJugadoresConectados; }
