@@ -71,8 +71,9 @@ void Parametros::mostrarAyuda() const {
           "(Requerido)\n"
        << "  -h, --help        Muestra la ayuda del ejercicio\n"
        << "Ejemplo de uso del cliente:\n"
-       << "  ./cliente -n Teo -p 8080 -s 127.0.0.1\n"
-       << "  ./cliente --nickname Teo --puerto 8080 --servidor 127.0.0.1\n"
+       << "  ./bin/cliente.exe -n Teo -p 8080 -s 127.0.0.1\n"
+       << "  ./bin/cliente.exe --nickname Teo --puerto 8080 --servidor "
+          "127.0.0.1\n"
        << "Consideraciones:\n"
        << "   -Para cerrar el cliente puede usar la senal SIGUSR1.\n"
        << endl;

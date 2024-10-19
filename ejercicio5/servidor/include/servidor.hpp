@@ -48,12 +48,14 @@ private:
                       string mensajeDefinidoPorServidor) const;
   string obtenerNickname(const char *const buffer) const;
   int elegirPreguntaRandom(const vector<Pregunta> &preguntas) const;
+  string obtenerNicknameCliente(int socketCliente) const;
+  bool nicknameDuplicado(const string &nicknameCliente) const;
 
 public:
   Servidor() = default;
   Servidor(int cantJugadores, int cantPreguntas);
-  void crearSocket(int puerto);
-  void aceptarConexion();
+  void crearSocket(int puerto, int cantUsuariosMaximo);
+  void aceptarConexionNueva();
   static void manejadorFinDeServidor(int signo);
   void sacarClientesCaidos();
   void jugar();
@@ -67,10 +69,7 @@ public:
   void liberarRecursos() const;
   void confirmarPartida() const;
   void reiniciar();
-  void mostrarJugadoresConectados() {
-    cout << "Cantidad de jugadores en la sala: " << cantidadJugadoresConectados
-         << endl;
-  };
+  // void mostrarJugadoresConectados() const;
   int getCantJugadores() { return cantidadJugadoresConectados; }
   ~Servidor();
 };

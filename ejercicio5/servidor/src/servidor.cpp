@@ -21,7 +21,7 @@ Servidor::Servidor(int cantJugadores, int cantPreguntas)
   signal(SIGUSR1, Servidor::manejadorFinDeServidor);
 }
 
-void Servidor::crearSocket(int puerto) {
+void Servidor::crearSocket(int puerto, int cantUsuariosMaximo) {
 
   int opcion = 1;
   struct sockaddr_in direccion;
@@ -32,6 +32,7 @@ void Servidor::crearSocket(int puerto) {
 
   if (setsockopt(socketServidor, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
                  &opcion, sizeof(opcion))) {
+    close(socketServidor);
     throw runtime_error("Error: No se pudo configurar el socket.");
   }
 
@@ -45,7 +46,8 @@ void Servidor::crearSocket(int puerto) {
                         "IP y el puerto: " +
                         to_string(puerto));
   }
-  if (listen(socketServidor, 3) < 0) {
+  if (listen(socketServidor, cantUsuariosMaximo) < 0) {
+    close(socketServidor);
     throw runtime_error("Error: El listen fallo.");
   }
 }
@@ -120,7 +122,7 @@ void Servidor::enviarPregunta(int sockCliente, MensajeServidor &msjServidor,
   send(sockCliente, &msjServidor, sizeof(MensajeServidor), 0);
 }
 
-void Servidor::aceptarConexion() {
+void Servidor::aceptarConexionNueva() {
   struct sockaddr_in direccionCliente;
   socklen_t tamDireccionCliente =
       sizeof(direccionCliente); // No puedo pasar directamente el
@@ -136,10 +138,46 @@ void Servidor::aceptarConexion() {
                           string(strerror(errno)));
     }
   }
+  string nicknameCliente = obtenerNicknameCliente(socketCliente);
+  char mensaje[TAM_MSJ_SERVIDOR];
 
-  cantidadJugadoresConectados++;
-  socketsClientes.emplace_back(socketCliente);
-  // cout << "Conexión aceptada." << endl;
+  if (!nicknameCliente.empty()) {
+
+    if (!nicknameDuplicado(nicknameCliente)) {
+      cantidadJugadoresConectados++;
+      socketsClientes.emplace_back(socketCliente);
+      puntajes[nicknameCliente] = 0;
+      strcpy(mensaje,
+             "0|Hemos recibido su nickname! Por favor aguarde hasta que "
+             "el juego comience...");
+      // cout << "Conexión aceptada." << endl;
+    } else {
+      strcpy(
+          mensaje,
+          "1|Lo sentimos! Ha ingresado un nickname que ya se ha registrado en "
+          "el servidor, por favor intente de nuevo con uno diferente.");
+    }
+
+  } else {
+    strcpy(mensaje, "2|Lo sentimos! No hemos podido recibir su nickname.");
+  }
+  send(socketCliente, mensaje, sizeof(mensaje), 0);
+}
+
+bool Servidor::nicknameDuplicado(const string &nicknameCliente) const {
+  auto it = puntajes.find(nicknameCliente);
+  return it != puntajes.end() ? true : false;
+}
+
+string Servidor::obtenerNicknameCliente(int socketCliente) const {
+
+  char buffer[TAM_NICKNAME];
+
+  int bytesRecibidos = recv(socketCliente, buffer, sizeof(buffer), 0);
+  if (bytesRecibidos <= 0 || bytesRecibidos > TAM_MSJ_SERVIDOR) {
+    return string("");
+  }
+  return string(buffer);
 }
 void Servidor::sacarClientesCaidos() {
   char buffer[1]; // Buffer vacío, no esperamos leer datos reales
@@ -310,3 +348,15 @@ void Servidor::reiniciar() {
   preguntasSeleccionadas.clear();
   hilosClientes.clear();
 }
+
+/*
+void Servidor::mostrarJugadoresConectados() const {
+  static int jugadoresConectadosUltVez = 0;
+
+  if (cantidadJugadoresConectados != jugadoresConectadosUltVez) {
+    jugadoresConectadosUltVez++;
+    cout << "Cantidad de jugadores en la sala: " << cantidadJugadoresConectados
+         << endl;
+  }
+};
+*/

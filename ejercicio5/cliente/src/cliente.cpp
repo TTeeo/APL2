@@ -9,7 +9,7 @@ Cliente::Cliente(string nombre) : nickname(nombre) {
   signal(SIGUSR1, Cliente::manejadorFinCliente);
 }
 
-void Cliente::crearSocket(string ip, int puerto) {
+void Cliente::crearSocket(string ip, int puerto, string nickname) {
 
   descriptorSocket = socket(AF_INET, SOCK_STREAM, 0);
   if (descriptorSocket < 0) {
@@ -26,9 +26,32 @@ void Cliente::crearSocket(string ip, int puerto) {
     close(descriptorSocket);
     throw runtime_error("No se pudo conectar con el servidor.");
   }
+  char nicknameChr[nickname.length() + 1];
+  strcpy(nicknameChr, nickname.c_str());
 
+  if (send(descriptorSocket, nicknameChr, sizeof(nicknameChr), 0) == -1) {
+    close(descriptorSocket);
+    throw runtime_error("No se pudo enviar el nickname al servidor");
+  }
+  char mensajeServidor[TAM_MSJ_SERVIDOR];
 
-  cout << "Conectado al servidor." << std::endl;
+  int bytesRecibidos =
+      recv(descriptorSocket, mensajeServidor, sizeof(mensajeServidor), 0);
+
+  if (bytesRecibidos == -1) {
+    close(descriptorSocket);
+    throw runtime_error("Error al recibir datos: " + string(strerror(errno)));
+  }
+  if (bytesRecibidos == 0) {
+    close(descriptorSocket);
+    throw runtime_error("El servidor ha cerrado la conexion.");
+  }
+  string msjServidor(mensajeServidor + 2);
+  int codigoEstado = mensajeServidor[0] - '0';
+
+  if (codigoEstado != 0) {
+    throw runtime_error(msjServidor);
+  }
 }
 
 int Cliente::obtenerRespuestaCliente() const {

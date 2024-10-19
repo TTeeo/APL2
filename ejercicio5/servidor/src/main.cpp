@@ -24,8 +24,10 @@ int main(int argc, const char *argv[]) {
     // 3. Crear el servidor e inicializar el socket
     Servidor servidor(parametros.getCantidadUsuarios(),
                       parametros.getCantidadPreguntas());
-    servidor.crearSocket(parametros.getPuerto());
-    cout << "Servidor iniciado. Para finalizarlo usa 'kill -SIGUSR1 " << getpid() << "'." << endl;
+    servidor.crearSocket(parametros.getPuerto(),
+                         parametros.getCantidadUsuarios());
+    cout << "Servidor iniciado. Para finalizarlo usa 'kill -SIGUSR1 "
+         << getpid() << "'." << endl;
 
     while (true) {
       cout << "\nSala iniciada, esperando jugadores..." << endl;
@@ -34,10 +36,11 @@ int main(int argc, const char *argv[]) {
 
       // 5. Ciclo principal: aceptar conexiones hasta que la sala esté llena o
       // se cierre el servidor
+
       while (!servidor.salaLlena()) {
-        servidor.aceptarConexion();
+        servidor.aceptarConexionNueva();
         servidor.sacarClientesCaidos();
-        servidor.mostrarJugadoresConectados();
+        // servidor.mostrarJugadoresConectados();
       }
 
       // 6. Confirmar que la partida va a comenzar

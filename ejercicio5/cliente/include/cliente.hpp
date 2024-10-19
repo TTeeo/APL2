@@ -29,7 +29,7 @@ private:
 public:
   Cliente(string nombre);
   static void manejadorFinCliente(int signo);
-  void crearSocket(string ip, int puerto);
+  void crearSocket(string ip, int puerto, string nickname);
   void jugar();
   void cerrarSocket();
   bool juegoListoParaIniciar() const;
