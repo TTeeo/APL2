@@ -28,39 +28,25 @@ void Cliente::crearSocket(string ip, int puerto, string nickname) {
   }
 
   bool barrera = false;
-  cout << "Hola " << endl;
-  recv(descriptorSocket, &barrera, sizeof(bool), 0);
-  cout << "Hola " << endl;
+  TransmisionMensajes::recibirMensaje(descriptorSocket, &barrera, sizeof(bool),
+                                      0);
+
   if (barrera) {
-    close(descriptorSocket);
     throw runtime_error("La partida ya esta empezada.");
   }
 
   char nicknameChr[nickname.length() + 1];
   strcpy(nicknameChr, nickname.c_str());
 
-  if (send(descriptorSocket, nicknameChr, sizeof(nicknameChr), 0) == -1) {
-    close(descriptorSocket);
-    throw runtime_error("No se pudo enviar el nickname al servidor");
-  }
-  char mensajeServidor[TAM_MSJ_SERVIDOR];
+  TransmisionMensajes::enviarMensaje(descriptorSocket, nicknameChr,
+                                     sizeof(nicknameChr));
 
-  int bytesRecibidos =
-      recv(descriptorSocket, mensajeServidor, sizeof(mensajeServidor), 0);
+  ComunicacionNickname comunicacion;
+  TransmisionMensajes::recibirMensaje(descriptorSocket, &comunicacion,
+                                      sizeof(comunicacion), 0);
 
-  if (bytesRecibidos == -1) {
-    close(descriptorSocket);
-    throw runtime_error("Error al recibir datos: " + string(strerror(errno)));
-  }
-  if (bytesRecibidos == 0) {
-    close(descriptorSocket);
-    throw runtime_error("El servidor ha cerrado la conexion.");
-  }
-  string msjServidor(mensajeServidor + 2);
-  int codigoEstado = mensajeServidor[0] - '0';
-
-  if (codigoEstado != 0) {
-    throw runtime_error(msjServidor);
+  if (comunicacion.codigoEstado != COMUNICACION_NICKNAME_EXITO) {
+    throw runtime_error(string(comunicacion.mensaje));
   }
 }
 
@@ -75,16 +61,20 @@ int Cliente::obtenerRespuestaCliente() const {
 
     try {
       numeroOpcion = stoi(respuesta);
+
+      if (!esOpcionValida(numeroOpcion)) {
+        cout
+            << "La opcion ingresada no es valida, por favor ingrese una opcion "
+               "correcta."
+            << endl;
+      }
     } catch (const exception &) {
       cout << "La opcion ingresada no es un numero. Por favor, vuelva a "
               "intentar!"
            << endl;
+      continue;
     }
-    if (!esOpcionValida(numeroOpcion)) {
-      cout << "La opcion ingresada no es valida, por favor ingrese una opcion "
-              "correcta."
-           << endl;
-    }
+
   } while (!esOpcionValida(numeroOpcion));
 
   return numeroOpcion;
@@ -94,117 +84,97 @@ bool Cliente::esOpcionValida(int opcion) const {
   return opcion > 0 && opcion <= CANT_OPCIONES;
 }
 
-void Cliente::mostrarResultadoJugador(Resultado &res) const {
+void Cliente::jugar() {
 
-  cout << setw(10) << res.posicion << setw(TAM_NICKNAME) << res.nickname
-       << setw(10) << res.puntaje << endl;
+  MensajeServidor msjServidor;
+  int respuesta;
+
+  while (true) {
+    TransmisionMensajes::recibirMensaje(descriptorSocket, &msjServidor,
+                                        sizeof(MensajeServidor), 0);
+
+    if (!msjServidor.partidaEnCurso) {
+      cout << msjServidor.mensaje << "\n\n" << endl;
+      break;
+    }
+    cout << "\n" << msjServidor.mensaje << endl;
+    mostrarPregunta(msjServidor);
+    respuesta = obtenerRespuestaCliente();
+    TransmisionMensajes::enviarMensaje(descriptorSocket, &respuesta,
+                                       sizeof(int));
+  }
 }
 
-void Cliente::MostrarPregunta(MensajeServidor &msjServidor) const {
+vector<Resultado> Cliente::obtenerResultados() {
+  int cantJugadoresTotales;
 
-  cout << "\n" << msjServidor.mensaje << endl;
+  TransmisionMensajes::recibirMensaje(descriptorSocket, &cantJugadoresTotales,
+                                      sizeof(int), 0);
+
+  char buffer[TAM_BUFFER];
+  int resultadosALeer;
+  bool quedanMensajes;
+  Resultado res;
+  const char *inicioLecturaDatos = buffer + sizeof(int) + sizeof(bool);
+  vector<Resultado> retorno;
+
+  do {
+    TransmisionMensajes::recibirMensaje(descriptorSocket, buffer,
+                                        sizeof(buffer), 0);
+
+    memcpy(&resultadosALeer, buffer, sizeof(int));
+    memcpy(&quedanMensajes, buffer + sizeof(int), sizeof(bool));
+    for (int i = 0; i < resultadosALeer; i++) {
+      memcpy(&res, inicioLecturaDatos + sizeof(Resultado) * i,
+             sizeof(Resultado));
+      retorno.push_back(res);
+    }
+  } while (quedanMensajes);
+
+  return retorno;
+}
+
+void Cliente::mostrarResultados(vector<Resultado> resultados) const {
+  cout << left; // Alinear a la izquierda
+  cout << setw(10) << "Posición" << setw(TAM_NICKNAME) << "Jugador" << setw(10)
+       << "Puntaje" << endl;
+  cout << string(81, '-') << endl; // Línea separadora
+
+  bool clienteGano = false;
+
+  for (const auto &res : resultados) {
+    cout << setw(10) << res.posicion << setw(TAM_NICKNAME) << res.nickname
+         << setw(10) << res.puntaje << endl;
+    if (string(res.nickname) == this->nickname && res.posicion == 1) {
+      clienteGano = true;
+    }
+  }
+
+  cout << string(81, '-') << endl;
+  cout << (clienteGano ? "\nFelicidades, has ganado!!"
+                       : "\nTienes que mejorar más!! Has perdido.")
+       << "\n\nLa partida ha finalizado!! Gracias por jugar con nosotros.\n"
+       << endl;
+}
+
+void Cliente::mostrarPregunta(MensajeServidor &msjServidor) const {
+
   cout << msjServidor.pregunta << "\n" << endl;
 
   for (const auto &opt : msjServidor.opciones) {
     cout << opt << endl;
   }
 }
-
-void Cliente::jugar() {
-
-  char buffer[TAM_BUFFER];
-  strcpy(buffer, nickname.c_str());
-
-  if (send(descriptorSocket, buffer, TAM_NICKNAME, 0) == -1) {
-    throw runtime_error("Error: No se pudo enviar el nickname." + nickname);
-  }
-  MensajeServidor msjServidor;
-  int respuesta, bytesRecibidos;
-
-  while (true) {
-    bytesRecibidos = recv(descriptorSocket, buffer, sizeof(MensajeServidor), 0);
-    if (bytesRecibidos == 0) {
-      throw runtime_error("Error: El servidor se ha desconectado.");
-    }
-    if (bytesRecibidos < 0) {
-      throw runtime_error("Error al recibir datos: " + string(strerror(errno)));
-    }
-    memcpy(&msjServidor, buffer, sizeof(MensajeServidor));
-
-    if (!msjServidor.partidaEnCurso) {
-      cout << msjServidor.mensaje << "\n\n" << endl;
-      break;
-    }
-
-    MostrarPregunta(msjServidor);
-    respuesta = obtenerRespuestaCliente();
-
-    if (send(descriptorSocket, &respuesta, sizeof(int), 0) == -1) {
-      throw runtime_error("Error: El servidor se ha desconectado o no se ha "
-                          "podido enviar la respuesta.");
-    }
-  }
-
-  if (msjServidor.partidaEnCurso == false) {
-    if (recv(descriptorSocket, buffer, TAM_BUFFER, 0) <= 0) {
-      throw runtime_error("Error: No se han podido recibir los resultados");
-    }
-    int cantJugadores;
-    memcpy(&cantJugadores, buffer, sizeof(int));
-
-    cout << left; // Alinear a la izquierda
-    cout << setw(10) << "Posición" << setw(TAM_NICKNAME) << "Jugador"
-         << setw(10) << "Puntaje" << endl;
-    cout << string(81, '-') << endl; // Línea separadora
-    Resultado res;
-    bool clienteGano = false;
-
-    for (int i = 0; i < cantJugadores; i++) {
-      memcpy(&res, buffer + sizeof(int) + sizeof(Resultado) * i,
-             sizeof(Resultado));
-
-      mostrarResultadoJugador(res);
-      if (string(res.nickname) == this->nickname && res.posicion == 1) {
-        clienteGano = true;
-      }
-    }
-    cout << string(81, '-') << endl;
-    cout << (clienteGano ? "\nFelicidades, has ganado!!"
-                         : "\nTienes que mejorar más!! Has perdido.")
-         << "\n\nLa partida ha finalizado!! Gracias por jugar con nosotros.\n"
-         << endl;
-  } else {
-    cout << "\n\nNo se pudo completar la partida." << endl;
-  }
-}
-
 bool Cliente::juegoListoParaIniciar() const {
 
   bool clientesListos = false;
-  int bytesRecibidos = recv(descriptorSocket, &clientesListos, sizeof(bool), 0);
 
-  if (bytesRecibidos < 0) {
-
-    switch (errno) {
-    case EAGAIN | EWOULDBLOCK:
-      // No hay datos disponibles en este momento, pero la conexión sigue activa
-      return false;
-    case EBADF:
-      throw runtime_error("Descriptor de socket no válido. El servidor puede "
-                          "haberse desconectado.");
-    case ECONNRESET:
-      throw runtime_error("La conexión fue restablecida por el servidor.");
-    case EINTR:
-      // La llamada fue interrumpida por una señal, se puede reintentar
-      return false;
-    default:
-      throw runtime_error(
-          "Error desconocido al intentar recibir datos del servidor.");
-    }
-  } else if (bytesRecibidos == 0) {
-    throw runtime_error("El servidor se ha desconectado de manera ordenada.");
+  // No hay datos disponibles en este momento, pero la conexión sigue activa
+  if (TransmisionMensajes::recibirMensaje(descriptorSocket, &clientesListos,
+                                          sizeof(bool),
+                                          0) == DATOS_NO_DISPONIBLES) {
+    return false;
   }
-
   return clientesListos;
 }
 

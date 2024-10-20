@@ -13,8 +13,8 @@ int main(int argc, char *argv[]) {
 
     cliente.crearSocket(parametros.getServidorIp(), parametros.getPuerto(),
                         parametros.getNickname());
-    cout << "Para finalizar el cliente usa 'kill -SIGUSR1 26177 " << getpid()
-         << "'." << endl;
+    cout << "Para finalizar el cliente usa 'kill -SIGUSR1 " << getpid() << "'."
+         << endl;
     cout << "\nSe ha ingresado a la sala, cuando haya suficientes jugadores se "
             "iniciara el juego."
          << endl;
@@ -22,6 +22,10 @@ int main(int argc, char *argv[]) {
     while (!cliente.juegoListoParaIniciar()) {
     }
     cliente.jugar();
+
+    cout << "Aguardando que todos los jugadores terminen la partida..." << endl;
+
+    cliente.mostrarResultados(cliente.obtenerResultados());
   }
 
   catch (const exception &e) {

@@ -1,14 +1,17 @@
 #pragma once
 
 #include "config.hpp"
+#include "utils.hpp"
 #include <arpa/inet.h>
 #include <csignal>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
+#include <math.h>
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
+#include <vector>
 
 using namespace std;
 
@@ -19,7 +22,7 @@ private:
   int descriptorSocket = -1;
   static Cliente *instanciaCliente;
 
-  void MostrarPregunta(MensajeServidor &msjServidor) const;
+  void mostrarPregunta(MensajeServidor &msjServidor) const;
 
   int obtenerRespuestaCliente() const;
 
@@ -33,5 +36,7 @@ public:
   void jugar();
   void cerrarSocket();
   bool juegoListoParaIniciar() const;
+  vector<Resultado> obtenerResultados();
+  void mostrarResultados(vector<Resultado> resultados) const;
   ~Cliente();
 };

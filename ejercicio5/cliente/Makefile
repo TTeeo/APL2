@@ -2,7 +2,7 @@
 CXX = g++
 CXXFLAGS = -Wall -Wextra -std=c++20 -Iinclude  # Incluye la carpeta de headers
 TARGET = bin/cliente.exe                         # Ruta del ejecutable
-SOURCES = src/main.cpp src/cliente.cpp src/params.cpp # Fuentes
+SOURCES = src/main.cpp src/cliente.cpp src/params.cpp src/utils.cpp # Fuentes
 OBJECTS = $(patsubst src/%.cpp, obj/%.o, $(SOURCES))  # Archivos objeto
 
 # Regla por defecto

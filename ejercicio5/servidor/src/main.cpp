@@ -10,9 +10,8 @@ using namespace std;
 
 int main(int argc, const char *argv[]) {
   try {
-    // 1. Mostrar el PID del proceso
 
-    // 2. Configuración de parámetros y carga de preguntas
+    // 1. Configuración de parámetros y carga de preguntas
     Parametros parametros(argc - 1, argv + 1);
     Archivo archivo(parametros.getNombreArchivoPreguntas());
 
@@ -21,26 +20,40 @@ int main(int argc, const char *argv[]) {
       throw invalid_argument("No disponemos de las preguntas solicitadas");
     }
 
-    // 3. Crear el servidor e inicializar el socket
+    // 2. Crear el servidor e inicializar el socket
     Servidor servidor(parametros.getCantidadUsuarios(),
                       parametros.getCantidadPreguntas());
     servidor.crearSocket(parametros.getPuerto(),
                          parametros.getCantidadUsuarios());
+
     cout << "Servidor iniciado. Para finalizarlo usa 'kill -SIGUSR1 "
          << getpid() << "'." << endl;
 
+    // 3. Se inicia un ciclo infinito hasta que se identifique la señal -SIGUSR1
+
+    int socketCliente;
+    string nicknameCliente;
+
     while (true) {
       cout << "\nSala iniciada, esperando jugadores..." << endl;
-      // 4. Cargar preguntas al servidor
+      // 4. Cargar preguntas al azar segun la cantidad ingresada por parametro
+      // al servidor
       servidor.cargarPreguntas(archivo.getPreguntas());
 
-      // 5. Ciclo principal: aceptar conexiones hasta que la sala esté llena o
-      // se cierre el servidor
+      // 5. Ciclo principal: aceptar conexiones hasta que la sala esté llena
 
       while (!servidor.salaLlena()) {
-        servidor.aceptarConexionNueva();
+
+        socketCliente = servidor.aceptarConexion();
+
+        nicknameCliente = servidor.obtenerNickname(socketCliente);
         servidor.sacarClientesCaidos();
-        // servidor.mostrarJugadoresConectados();
+
+        servidor.nicknameDuplicado(nicknameCliente)
+            ? servidor.rechazarNicknameDuplicado(socketCliente)
+            : servidor.confirmarConexion(socketCliente, nicknameCliente);
+
+        servidor.mostrarJugadoresConectados();
       }
 
       // 6. Confirmar que la partida va a comenzar

@@ -51,63 +51,49 @@ void Servidor::crearSocket(int puerto, int cantUsuariosMaximo) {
     throw runtime_error("Error: El listen fallo.");
   }
 }
-void Servidor::manejadorCliente(int sockCliente) {
-  char buffer[TAM_BUFFER];
+void Servidor::manejadorCliente(int socketCliente) {
 
-  ssize_t bytesRecibidos = recv(sockCliente, buffer, TAM_NICKNAME, 0);
-  if (bytesRecibidos <= 0) {
-    cout << "Cliente desconectado sin iniciar el juego" << endl;
-    return;
-  }
   MensajeCliente mensajeCliente;
-
-  memcpy(&mensajeCliente, buffer,
-         sizeof(((MensajeCliente *)nullptr)->nickname));
-
-  puntajes[string(mensajeCliente.nickname)] = 0;
-  socketClienteNickname[sockCliente] = string(mensajeCliente.nickname);
-
   MensajeServidor mensajeServidor;
   string mensajeAEnviar;
+  int opcionElegida;
 
   mensajeServidor.partidaEnCurso = true;
 
   mensajeAEnviar = MensajesJuego::mensajeBienvenida.c_str();
 
   for (int turno = 0; turno < cantPreguntasPorPartida; turno++) {
-    enviarPregunta(sockCliente, mensajeServidor, preguntasSeleccionadas[turno],
-                   mensajeAEnviar);
+    enviarPregunta(socketCliente, mensajeServidor,
+                   preguntasSeleccionadas[turno], mensajeAEnviar);
 
-    bytesRecibidos = recv(sockCliente, buffer, sizeof(int), 0);
-    if (bytesRecibidos <= 0) {
+    try {
+      TransmisionMensajes::recibirMensaje(socketCliente, &opcionElegida,
+                                          sizeof(int), 0);
+    } catch (const exception &) {
       cout << "Cliente " << mensajeCliente.nickname << " se ha desconectado."
            << endl;
       return;
     }
-
-    memcpy(&(mensajeCliente.opcionElegida), buffer, sizeof(int));
-    if (bytesRecibidos == sizeof(int)) {
-      mensajeAEnviar = procesarRespuestaCliente(
-          mensajeCliente, preguntasSeleccionadas[turno].getOpcionCorrecta());
+    if (clienteAcerto(opcionElegida,
+                      preguntasSeleccionadas[turno].getOpcionCorrecta())) {
+      puntajes[socketClienteNickname[socketCliente]]++;
+      mensajeAEnviar = MensajesJuego::mensajeRespuestaCorrecta;
+    } else {
+      mensajeAEnviar = MensajesJuego::mensajeRespuestaIncorrecta;
     }
   }
 
   mensajeServidor.partidaEnCurso = false;
   strcpy(mensajeServidor.mensaje, mensajeAEnviar.c_str());
-  send(sockCliente, &mensajeServidor, sizeof(MensajeServidor), 0);
+  TransmisionMensajes::enviarMensaje(socketCliente, &mensajeServidor,
+                                     sizeof(MensajeServidor));
 
-  cout << "Finalizo Partida con cliente " << mensajeCliente.nickname << endl;
+  cout << "Finalizo Partida con cliente "
+       << socketClienteNickname[socketCliente] << endl;
 }
 
-string Servidor::procesarRespuestaCliente(MensajeCliente &msjCliente,
-                                          int opcionCorrecta) {
-
-  if (msjCliente.opcionElegida == opcionCorrecta) {
-
-    puntajes[msjCliente.nickname]++;
-    return MensajesJuego::mensajeRespuestaCorrecta;
-  }
-  return MensajesJuego::mensajeRespuestaIncorrecta;
+bool Servidor::clienteAcerto(int opcionElegida, int opcionCorrecta) const {
+  return opcionElegida == opcionCorrecta ? true : false;
 }
 
 void Servidor::enviarPregunta(int sockCliente, MensajeServidor &msjServidor,
@@ -119,103 +105,90 @@ void Servidor::enviarPregunta(int sockCliente, MensajeServidor &msjServidor,
     strcpy(msjServidor.opciones[i], pregunta.getOpcionSegunPosicion(i).c_str());
   }
   strcpy(msjServidor.mensaje, mensajeDefinidoPorServidor.c_str());
-  send(sockCliente, &msjServidor, sizeof(MensajeServidor), 0);
+  TransmisionMensajes::enviarMensaje(sockCliente, &msjServidor,
+                                     sizeof(MensajeServidor));
 }
-
-void Servidor::aceptarConexionNueva() {
-
+int Servidor::aceptarConexion() {
   int socketCliente;
-  do {
-    struct sockaddr_in direccionCliente;
-    socklen_t tamDireccionCliente =
-        sizeof(direccionCliente); // No puedo pasar directamente el
-                                  // sizeof(direccionCliente) en accept
-    socketCliente = accept(socketServidor, (struct sockaddr *)&direccionCliente,
-                           &tamDireccionCliente);
-    if (socketCliente == -1) {
-      if (errno == EBADF) {
-        throw runtime_error("El servidor se cerro inesperadamente.");
-      } else {
-        throw runtime_error("Error al aceptar la conexión: " +
-                            string(strerror(errno)));
-      }
-    }
-    if (cantidadJugadoresConectados == cantJugadoresMaximo) {
-      close(socketCliente);
-      bool barrera = true;
-      send(socketCliente, &barrera, sizeof(bool), 0);
-    }
-  } while (cantidadJugadoresConectados == cantJugadoresMaximo);
-
-  bool barrera = false;
-  send(socketCliente, &barrera, sizeof(bool), 0);
-
-  string nicknameCliente = obtenerNicknameCliente(socketCliente);
-  char mensaje[TAM_MSJ_SERVIDOR];
-
-  if (!nicknameCliente.empty()) {
-
-    if (!nicknameDuplicado(nicknameCliente)) {
-      cantidadJugadoresConectados++;
-      socketsClientes.emplace_back(socketCliente);
-      puntajes[nicknameCliente] = 0;
-      strcpy(mensaje,
-             "0|Hemos recibido su nickname! Por favor aguarde hasta que "
-             "el juego comience...");
-      // cout << "Conexión aceptada." << endl;
+  struct sockaddr_in direccionCliente;
+  socklen_t tamDireccionCliente =
+      sizeof(direccionCliente); // No puedo pasar directamente el
+                                // sizeof(direccionCliente) en accept
+  socketCliente = accept(socketServidor, (struct sockaddr *)&direccionCliente,
+                         &tamDireccionCliente);
+  if (socketCliente == -1) {
+    if (errno == EBADF) {
+      throw runtime_error("El servidor se cerro inesperadamente.");
     } else {
-      strcpy(
-          mensaje,
-          "1|Lo sentimos! Ha ingresado un nickname que ya se ha registrado en "
-          "el servidor, por favor intente de nuevo con uno diferente.");
+      throw runtime_error("Error al aceptar la conexión: " +
+                          string(strerror(errno)));
     }
-
-  } else {
-    strcpy(mensaje, "2|Lo sentimos! No hemos podido recibir su nickname.");
   }
-  send(socketCliente, mensaje, sizeof(mensaje), 0);
+
+  bool salaLlena = false;
+  TransmisionMensajes::enviarMensaje(socketCliente, &salaLlena, sizeof(bool));
+  cout << "Conexion aceptada" << endl;
+  return socketCliente;
 }
 
 bool Servidor::nicknameDuplicado(const string &nicknameCliente) const {
-  auto it = puntajes.find(nicknameCliente);
-  return it != puntajes.end() ? true : false;
+  return puntajes.find(nicknameCliente) != puntajes.end();
 }
 
-string Servidor::obtenerNicknameCliente(int socketCliente) const {
-
-  char buffer[TAM_NICKNAME];
-
-  int bytesRecibidos = recv(socketCliente, buffer, sizeof(buffer), 0);
-  if (bytesRecibidos <= 0 || bytesRecibidos > TAM_MSJ_SERVIDOR) {
-    return string("");
-  }
-  return string(buffer);
-}
 void Servidor::sacarClientesCaidos() {
   char buffer[1]; // Buffer vacío, no esperamos leer datos reales
-
+  int socketCliente;
   // Usamos un iterador para evitar problemas al eliminar elementos
   for (auto it = socketsClientes.begin(); it != socketsClientes.end();) {
-    int resultado = recv(*it, buffer, sizeof(buffer), MSG_PEEK | MSG_DONTWAIT);
-
-    if (resultado == 0) {
-      // cout << "Cliente " << *it << " ha cerrado la conexión de manera
-      // ordenada" << endl;
-      close(*it);
-      it = socketsClientes.erase(it); // Eliminar cliente y avanzar al siguiente
-      cantidadJugadoresConectados--;
-    } else if (resultado < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-      // Ocurrió un error en la conexión
-      // cout << "Error en la conexión con el cliente " << *it << ": "
-      //     << strerror(errno) << endl;
-      close(*it);
-      it = socketsClientes.erase(it); // Eliminar cliente y avanzar al siguiente
-      cantidadJugadoresConectados--;
-    } else {
-      // No se ha detectado cierre de conexión, avanzar al siguiente cliente
+    socketCliente = *it;
+    try {
+      TransmisionMensajes::recibirMensaje(socketCliente, buffer, sizeof(buffer),
+                                          MSG_PEEK | MSG_DONTWAIT);
       ++it;
+    } catch (const exception &) {
+      cout << "El cliente " << socketClienteNickname[socketCliente]
+           << " se ha desconectado." << endl;
+      close(socketCliente);
+      it = socketsClientes.erase(it); // Eliminar cliente y avanzar al siguiente
+      puntajes.erase(socketClienteNickname[socketCliente]);
+      socketClienteNickname.erase(socketCliente);
+      --cantidadJugadoresConectados;
     }
   }
+}
+
+string Servidor::obtenerNickname(int socketCliente) const {
+  char nicknameChr[TAM_NICKNAME];
+  TransmisionMensajes::recibirMensaje(socketCliente, nicknameChr,
+                                      sizeof(nicknameChr), 0);
+  return string(nicknameChr);
+}
+void Servidor::rechazarNicknameDuplicado(int socketCliente) const {
+  ComunicacionNickname comunicacion;
+
+  comunicacion.codigoEstado = COMUNICACION_NICKNAME_DUPLICADO;
+  strcpy(comunicacion.mensaje,
+         "Lo sentimos! El nickname ingresado ya se ha registrado "
+         "por favor intente de nuevo con uno diferente.");
+
+  TransmisionMensajes::enviarMensaje(socketCliente, &comunicacion,
+                                     sizeof(comunicacion));
+}
+
+void Servidor::confirmarConexion(int socketCliente, string &nickname) {
+  ComunicacionNickname comunicacion;
+
+  cantidadJugadoresConectados++;
+  socketsClientes.emplace_back(socketCliente);
+  puntajes[nickname] = 0;
+  socketClienteNickname[socketCliente] = nickname;
+  comunicacion.codigoEstado = COMUNICACION_NICKNAME_EXITO;
+  strcpy(comunicacion.mensaje,
+         "Hemos recibido su nickname! Por favor aguarde hasta que "
+         "el juego comience...");
+
+  TransmisionMensajes::enviarMensaje(socketCliente, &comunicacion,
+                                     sizeof(comunicacion));
 }
 
 void Servidor::jugar() {
@@ -235,11 +208,12 @@ void Servidor::jugar() {
 
 void Servidor::enviarResultados() const {
   vector<pair<int, string>> vectorPuntajes;
-  for (const auto &par : puntajes) {
-    vectorPuntajes.emplace_back(
-        par.second, par.first); // Invertir el orden: puntaje, nickname
-  }
 
+  // Invertir el orden: puntaje, nickname
+  for (const auto &par : puntajes) {
+    vectorPuntajes.emplace_back(par.second, par.first);
+  }
+  // Ordenar vector de mayor puntaje a menor.
   sort(vectorPuntajes.begin(), vectorPuntajes.end(),
        [](const auto &a, const auto &b) {
          if (a.first != b.first)
@@ -252,6 +226,7 @@ void Servidor::enviarResultados() const {
 
   int posicion = 1;
 
+  // Si un jugador empata con otro en puntaje obtienen la misma posicion.
   for (size_t i = 0; i < vectorPuntajes.size(); i++) {
 
     strcpy(resultado.nickname, vectorPuntajes[i].second.c_str());
@@ -266,35 +241,74 @@ void Servidor::enviarResultados() const {
     resultados.push_back(resultado);
   }
   char buffer[TAM_BUFFER];
-  memcpy(buffer, &cantJugadoresMaximo, sizeof(int));
 
-  for (size_t i = 0; i < resultados.size(); i++) {
+  int cantResultadosPosiblesEnBuffer =
+      (sizeof(buffer) - sizeof(int) - sizeof(bool)) / sizeof(Resultado);
 
-    memcpy(buffer + sizeof(int) + i * sizeof(Resultado), &resultados[i],
-           sizeof(Resultado));
-  }
+  // Si tengo muchos clientes, probablemente no pueda mandar todos los
+  // resultados en una solo ciclo, ya que el buffer puede ser menor al tamaño
+  // del mensaje total.
+
+  int cantidadMensajesPorJugador = floor(this->cantidadJugadoresConectados /
+                                         cantResultadosPosiblesEnBuffer) +
+                                   1;
+
+  int copiaCantidadJugadores = this->cantidadJugadoresConectados;
+  int i;
+  bool quedanMensajesPorEnviar;
 
   for (const auto &par : socketClienteNickname) {
-    if (send(par.first, buffer,
-             sizeof(Resultado) * cantJugadoresMaximo + sizeof(int), 0) != -1) {
-      cout << "Resultado enviado a: " << par.second << endl;
+    TransmisionMensajes::enviarMensaje(
+        par.first, &(this->cantidadJugadoresConectados), sizeof(int));
+
+    quedanMensajesPorEnviar = true;
+    for (i = 0; i < cantidadMensajesPorJugador - 1; i++) {
+      memcpy(buffer, &cantResultadosPosiblesEnBuffer, sizeof(int));
+      memcpy(buffer + sizeof(int), &quedanMensajesPorEnviar, sizeof(bool));
+
+      copiarResultados(buffer + sizeof(int) + sizeof(bool), resultados,
+                       i * cantResultadosPosiblesEnBuffer,
+                       cantResultadosPosiblesEnBuffer);
+      copiaCantidadJugadores -= cantResultadosPosiblesEnBuffer;
+      TransmisionMensajes::enviarMensaje(par.first, buffer, sizeof(buffer));
     }
+    quedanMensajesPorEnviar = false;
+    memcpy(buffer, &copiaCantidadJugadores, sizeof(int));
+    memcpy(buffer + sizeof(int), &quedanMensajesPorEnviar, sizeof(bool));
+
+    copiarResultados(buffer + sizeof(int) + sizeof(bool), resultados,
+                     i * cantResultadosPosiblesEnBuffer,
+                     copiaCantidadJugadores);
+    TransmisionMensajes::enviarMensaje(par.first, buffer, sizeof(buffer));
+
+    cout << "Resultado enviado a: " << par.second << endl;
+    copiaCantidadJugadores = this->cantidadJugadoresConectados;
+  }
+}
+
+void Servidor::copiarResultados(char buffer[], vector<Resultado> &resultados,
+                                int posDondeEmpezarACopiar,
+                                int cantResultadosACopiar) const {
+
+  for (int i = 0; i < cantResultadosACopiar; i++) {
+    memcpy(buffer + sizeof(Resultado) * i,
+           &resultados[posDondeEmpezarACopiar + i], sizeof(Resultado));
   }
 }
 
 Servidor::~Servidor() { liberarRecursos(); }
 
 void Servidor::liberarRecursos() const {
-  if (semServidor != SEM_FAILED) {
-    sem_close(semServidor);
-    sem_unlink(NOMBRE_SEM_SERVIDOR);
-  }
-
   for (const auto &socket : socketsClientes) {
     close(socket);
   }
   if (socketServidor != -1) {
     close(socketServidor);
+  }
+
+  if (semServidor != SEM_FAILED) {
+    sem_close(semServidor);
+    sem_unlink(NOMBRE_SEM_SERVIDOR);
   }
 }
 
@@ -309,6 +323,11 @@ int Servidor::elegirPreguntaRandom(const vector<Pregunta> &preguntas) const {
 }
 
 void Servidor::cargarPreguntas(vector<Pregunta> preguntas) {
+
+  if (preguntas.size() < (unsigned)cantPreguntasPorPartida) {
+    throw runtime_error("El vector de preguntas no contiene al menos la misma "
+                        "cantidad o mas de la solicitada.");
+  }
 
   if (preguntas.size() == (unsigned)cantPreguntasPorPartida) {
     preguntasSeleccionadas = preguntas;
@@ -328,9 +347,7 @@ void Servidor::manejadorFinDeServidor(int signo) {
 
     instanciaServidor->liberarRecursos();
 
-    if (instanciaServidor->cantidadJugadoresConectados ==
-            instanciaServidor->cantJugadoresMaximo ||
-        instanciaServidor->cantidadJugadoresConectados != 0) {
+    if (instanciaServidor->cantidadJugadoresConectados != 0) {
       cout << "\033[31mEl servidor se cerró inesperadamente.\033[0m" << endl;
       exit(EXIT_FAILURE);
     } else {
@@ -344,55 +361,29 @@ void Servidor::confirmarPartida() {
 
   bool confimarCliente = true;
   for (const auto &sock : socketsClientes) {
-    send(sock, &confimarCliente, sizeof(bool), 0);
-  }
-  rechazarClientes = thread(&Servidor::aceptarConexionNueva, this);
-}
-
-void Servidor::rechazarConexiones() {
-  struct sockaddr_in direccionCliente;
-  socklen_t tamDireccionCliente =
-      sizeof(direccionCliente); // No puedo pasar directamente el
-                                // sizeof(direccionCliente) en accept
-
-  while (cantidadJugadoresConectados == cantJugadoresMaximo) {
-    int socketCliente =
-        accept(socketServidor, (struct sockaddr *)&direccionCliente,
-               &tamDireccionCliente);
-    if (socketCliente == -1) {
-      if (errno == EBADF) {
-        throw runtime_error("El servidor se cerro inesperadamente.");
-      } else {
-        throw runtime_error("Error al aceptar la conexión: " +
-                            string(strerror(errno)));
-      }
-    }
-    close(socketCliente);
+    TransmisionMensajes::enviarMensaje(sock, &confimarCliente, sizeof(bool));
   }
 }
 
 void Servidor::reiniciar() {
 
   cantidadJugadoresConectados = 0;
-  for (auto &socket : socketsClientes) {
+  /*for (auto &socket : socketsClientes) {
     close(socket);
-  }
+  }*/
   socketsClientes.clear();
   puntajes.clear();
   socketClienteNickname.clear();
   preguntasSeleccionadas.clear();
   hilosClientes.clear();
-  rechazarClientes.join();
 }
 
-/*
 void Servidor::mostrarJugadoresConectados() const {
   static int jugadoresConectadosUltVez = 0;
 
   if (cantidadJugadoresConectados != jugadoresConectadosUltVez) {
-    jugadoresConectadosUltVez++;
+    jugadoresConectadosUltVez = cantidadJugadoresConectados;
     cout << "Cantidad de jugadores en la sala: " << cantidadJugadoresConectados
          << endl;
   }
 };
-*/

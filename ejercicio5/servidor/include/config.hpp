@@ -6,6 +6,8 @@
 #define TAM_MSJ_SERVIDOR 128
 #define TAM_NICKNAME 64
 #define TAM_BUFFER 1024
+#define COMUNICACION_NICKNAME_EXITO 0
+#define COMUNICACION_NICKNAME_DUPLICADO 1
 
 typedef struct {
 
@@ -22,6 +24,13 @@ typedef struct {
   int opcionElegida;
 
 } MensajeCliente;
+
+typedef struct {
+
+  char mensaje[TAM_MSJ_SERVIDOR];
+  int codigoEstado;
+
+} ComunicacionNickname;
 
 typedef struct {
 
