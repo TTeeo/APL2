@@ -70,8 +70,6 @@ void Servidor::manejadorCliente(int socketCliente) {
       TransmisionMensajes::recibirMensaje(socketCliente, &opcionElegida,
                                           sizeof(int), 0);
     } catch (const exception &) {
-      cout << "Cliente " << mensajeCliente.nickname << " se ha desconectado."
-           << endl;
       return;
     }
     if (clienteAcerto(opcionElegida,
@@ -127,7 +125,6 @@ int Servidor::aceptarConexion() {
 
   bool salaLlena = false;
   TransmisionMensajes::enviarMensaje(socketCliente, &salaLlena, sizeof(bool));
-  cout << "Conexion aceptada" << endl;
   return socketCliente;
 }
 
