@@ -1,9 +1,9 @@
-#include "servidor.hpp"
+#include "server.hpp"
 
 Servidor *Servidor::instanciaServidor = nullptr;
 
-Servidor::Servidor(int cantJugadores, int cantPreguntas)
-    : cantJugadoresMaximo(cantJugadores),
+Servidor::Servidor(int puerto, int cantJugadores, int cantPreguntas)
+    : puertoUtilizado(puerto), cantJugadoresMaximo(cantJugadores),
       cantPreguntasPorPartida(cantPreguntas) {
 
   semServidor = sem_open(NOMBRE_SEM_SERVIDOR, O_CREAT | O_EXCL, 0644, 0);
@@ -15,14 +15,14 @@ Servidor::Servidor(int cantJugadores, int cantPreguntas)
       throw runtime_error("Error al crear el semáforo: ");
     }
   }
+
   instanciaServidor = this;
   signal(SIGINT, SIG_IGN);
   signal(SIGTERM, SIG_IGN);
   signal(SIGUSR1, Servidor::manejadorFinDeServidor);
 }
 
-void Servidor::crearSocket(int puerto, int cantUsuariosMaximo) {
-
+void Servidor::crearSocket(int cantUsuariosMaximo) {
   int opcion = 1;
   struct sockaddr_in direccion;
   socketServidor = socket(AF_INET, SOCK_STREAM, 0);
@@ -36,15 +36,16 @@ void Servidor::crearSocket(int puerto, int cantUsuariosMaximo) {
     throw runtime_error("Error: No se pudo configurar el socket.");
   }
 
-  direccion.sin_family = AF_INET;         // IPv4
-  direccion.sin_addr.s_addr = INADDR_ANY; // Acepta cualquier IP local
-  direccion.sin_port = htons(puerto);     // Puerto a escuchar
+  direccion.sin_family = AF_INET;              // IPv4
+  direccion.sin_addr.s_addr = INADDR_ANY;      // Acepta cualquier IP local
+  direccion.sin_port = htons(puertoUtilizado); // Puerto a escuchar
 
   if (bind(socketServidor, (struct sockaddr *)&direccion, sizeof(direccion)) <
       0) {
-    throw runtime_error("Error: No se pudo asociar el scoket a la direccion "
+    cout << "Error en bind: " << strerror(errno) << endl;
+    throw runtime_error("Error: No se pudo asociar el socket a la direccion "
                         "IP y el puerto: " +
-                        to_string(puerto));
+                        to_string(puertoUtilizado));
   }
   if (listen(socketServidor, cantUsuariosMaximo) < 0) {
     close(socketServidor);
@@ -53,13 +54,11 @@ void Servidor::crearSocket(int puerto, int cantUsuariosMaximo) {
 }
 void Servidor::manejadorCliente(int socketCliente) {
 
-  MensajeCliente mensajeCliente;
   MensajeServidor mensajeServidor;
   string mensajeAEnviar;
   int opcionElegida;
 
   mensajeServidor.partidaEnCurso = true;
-
   mensajeAEnviar = MensajesJuego::mensajeBienvenida.c_str();
 
   for (int turno = 0; turno < cantPreguntasPorPartida; turno++) {
@@ -70,8 +69,12 @@ void Servidor::manejadorCliente(int socketCliente) {
       TransmisionMensajes::recibirMensaje(socketCliente, &opcionElegida,
                                           sizeof(int), 0);
     } catch (const exception &) {
+
+      cout << "El cliente " << socketClienteNickname[socketCliente]
+           << " se desconecto antes de finalizar la partida" << endl;
       return;
     }
+
     if (clienteAcerto(opcionElegida,
                       preguntasSeleccionadas[turno].getOpcionCorrecta())) {
       puntajes[socketClienteNickname[socketCliente]]++;
@@ -106,26 +109,46 @@ void Servidor::enviarPregunta(int sockCliente, MensajeServidor &msjServidor,
   TransmisionMensajes::enviarMensaje(sockCliente, &msjServidor,
                                      sizeof(MensajeServidor));
 }
-int Servidor::aceptarConexion() {
+void Servidor::aceptarConexion() {
+
   int socketCliente;
   struct sockaddr_in direccionCliente;
-  socklen_t tamDireccionCliente =
-      sizeof(direccionCliente); // No puedo pasar directamente el
-                                // sizeof(direccionCliente) en accept
-  socketCliente = accept(socketServidor, (struct sockaddr *)&direccionCliente,
-                         &tamDireccionCliente);
-  if (socketCliente == -1) {
-    if (errno == EBADF) {
-      throw runtime_error("El servidor se cerro inesperadamente.");
+  socklen_t tamDireccionCliente = sizeof(direccionCliente);
+
+  // Ciclo infinito hasta que se cierre el servidor.
+  while (true) {
+    socketCliente = accept(socketServidor, (struct sockaddr *)&direccionCliente,
+                           &tamDireccionCliente);
+    if (socketCliente == -1) {
+
+      if (errno == EBADF) {
+        throw runtime_error("El servidor se cerró inesperadamente.");
+      } else {
+        throw runtime_error("Error al aceptar la conexión: " +
+                            string(strerror(errno)));
+      }
+    }
+    if (debeCerrarse()) {
+      break;
+    }
+    char buffer[TAM_NICKNAME];
+    TransmisionMensajes::recibirMensaje(socketCliente, buffer, sizeof(buffer),
+                                        0);
+
+    if (salaLlena()) {
+      rechazarConexionPartidaEmpezada(socketCliente);
     } else {
-      throw runtime_error("Error al aceptar la conexión: " +
-                          string(strerror(errno)));
+      sacarClientesCaidos();
+
+      string nicknameCliente(buffer);
+
+      if (nicknameDuplicado(nicknameCliente)) {
+        rechazarNicknameDuplicado(socketCliente);
+      } else {
+        confirmarConexion(socketCliente, nicknameCliente);
+      }
     }
   }
-
-  bool salaLlena = false;
-  TransmisionMensajes::enviarMensaje(socketCliente, &salaLlena, sizeof(bool));
-  return socketCliente;
 }
 
 bool Servidor::nicknameDuplicado(const string &nicknameCliente) const {
@@ -133,6 +156,7 @@ bool Servidor::nicknameDuplicado(const string &nicknameCliente) const {
 }
 
 void Servidor::sacarClientesCaidos() {
+  mutexAccesosCompartidos.lock();
   char buffer[1]; // Buffer vacío, no esperamos leer datos reales
   int socketCliente;
   // Usamos un iterador para evitar problemas al eliminar elementos
@@ -152,16 +176,11 @@ void Servidor::sacarClientesCaidos() {
       --cantidadJugadoresConectados;
     }
   }
+  mutexAccesosCompartidos.unlock();
 }
 
-string Servidor::obtenerNickname(int socketCliente) const {
-  char nicknameChr[TAM_NICKNAME];
-  TransmisionMensajes::recibirMensaje(socketCliente, nicknameChr,
-                                      sizeof(nicknameChr), 0);
-  return string(nicknameChr);
-}
 void Servidor::rechazarNicknameDuplicado(int socketCliente) const {
-  ComunicacionNickname comunicacion;
+  ComunicacionEstadoConexion comunicacion;
 
   comunicacion.codigoEstado = COMUNICACION_NICKNAME_DUPLICADO;
   strcpy(comunicacion.mensaje,
@@ -172,8 +191,20 @@ void Servidor::rechazarNicknameDuplicado(int socketCliente) const {
                                      sizeof(comunicacion));
 }
 
+void Servidor::rechazarConexionPartidaEmpezada(int socketCliente) const {
+  ComunicacionEstadoConexion comunicacion;
+
+  comunicacion.codigoEstado = COMUNICACION_PARTIDA_EMPEZADA;
+  strcpy(comunicacion.mensaje,
+         "Lo sentimos! La partida ya ha empezado, intenta mas tarde.");
+
+  TransmisionMensajes::enviarMensaje(socketCliente, &comunicacion,
+                                     sizeof(comunicacion));
+}
+
 void Servidor::confirmarConexion(int socketCliente, string &nickname) {
-  ComunicacionNickname comunicacion;
+  mutexAccesosCompartidos.lock();
+  ComunicacionEstadoConexion comunicacion;
 
   cantidadJugadoresConectados++;
   socketsClientes.emplace_back(socketCliente);
@@ -186,24 +217,32 @@ void Servidor::confirmarConexion(int socketCliente, string &nickname) {
 
   TransmisionMensajes::enviarMensaje(socketCliente, &comunicacion,
                                      sizeof(comunicacion));
+  mutexAccesosCompartidos.unlock();
 }
 
 void Servidor::jugar() {
-
+  mutexAccesosCompartidos.lock();
   for (int sockCliente : socketsClientes) {
 
     hilosClientes.emplace_back(
         [this, sockCliente]() { manejadorCliente(sockCliente); });
   }
+  mutexAccesosCompartidos.unlock();
   cout << "Sala llena, iniciando juego..." << endl;
   for (thread &hilo : hilosClientes) {
     if (hilo.joinable()) {
       hilo.join();
     }
   }
+
+  cout << "Todos los clientes han finalizado la partida." << endl;
 }
 
-void Servidor::enviarResultados() const {
+void Servidor::enviarResultados() {
+
+  sacarClientesCaidos();
+  mutexAccesosCompartidos.lock();
+
   vector<pair<int, string>> vectorPuntajes;
 
   // Invertir el orden: puntaje, nickname
@@ -239,24 +278,29 @@ void Servidor::enviarResultados() const {
   }
   char buffer[TAM_BUFFER];
 
-  int cantResultadosPosiblesEnBuffer =
-      (sizeof(buffer) - sizeof(int) - sizeof(bool)) / sizeof(Resultado);
-
   // Si tengo muchos clientes, probablemente no pueda mandar todos los
   // resultados en una solo ciclo, ya que el buffer puede ser menor al tamaño
   // del mensaje total.
 
-  int cantidadMensajesPorJugador = floor(this->cantidadJugadoresConectados /
-                                         cantResultadosPosiblesEnBuffer) +
-                                   1;
+  // Estructura del mensaje: Cantidad resultados escritos en el buffer(int) +
+  // Faltan mas resultados por pasar(bool) + Envio de resultados (Resultado[])
 
-  int copiaCantidadJugadores = this->cantidadJugadoresConectados;
-  int i;
+  int cantResultadosPosiblesEnBuffer =
+      (sizeof(buffer) - sizeof(int) - sizeof(bool)) / sizeof(Resultado);
+
+  int cantidadMensajesPorJugador =
+      floor(this->cantJugadoresMaximo / cantResultadosPosiblesEnBuffer) + 1;
+
+  int copiaCantidadJugadores = this->cantJugadoresMaximo;
   bool quedanMensajesPorEnviar;
+  int i;
 
   for (const auto &par : socketClienteNickname) {
-    TransmisionMensajes::enviarMensaje(
-        par.first, &(this->cantidadJugadoresConectados), sizeof(int));
+
+    // Se hace envio primero de la cantidad de jugadores conectados en la
+    // partida.
+    TransmisionMensajes::enviarMensaje(par.first, &(this->cantJugadoresMaximo),
+                                       sizeof(int));
 
     quedanMensajesPorEnviar = true;
     for (i = 0; i < cantidadMensajesPorJugador - 1; i++) {
@@ -279,8 +323,9 @@ void Servidor::enviarResultados() const {
     TransmisionMensajes::enviarMensaje(par.first, buffer, sizeof(buffer));
 
     cout << "Resultado enviado a: " << par.second << endl;
-    copiaCantidadJugadores = this->cantidadJugadoresConectados;
+    copiaCantidadJugadores = this->cantJugadoresMaximo;
   }
+  mutexAccesosCompartidos.unlock();
 }
 
 void Servidor::copiarResultados(char buffer[], vector<Resultado> &resultados,
@@ -293,20 +338,55 @@ void Servidor::copiarResultados(char buffer[], vector<Resultado> &resultados,
   }
 }
 
-Servidor::~Servidor() { liberarRecursos(); }
+void Servidor::cerrar() {
+  mutexAccesosCompartidos.lock();
+  finServidor = true;
 
-void Servidor::liberarRecursos() const {
+  if (hiloAceptarConexiones.joinable()) {
+
+    // Me conecto al socket del servidor solo para salir del accept() bloqueante
+    // en el hilo aceptarConexiones, ya que no encuentro otra forma de levantar
+    // la funcion accept().
+    socketSenal = socket(AF_INET, SOCK_STREAM, 0);
+    if (socketSenal < 0) {
+      throw runtime_error(
+          "No se pudo crear el socket para enviar senal de finalizacion.");
+    }
+    struct sockaddr_in direccionSenal;
+    direccionSenal.sin_family = AF_INET;
+    direccionSenal.sin_port = htons(puertoUtilizado);
+
+    if (inet_pton(AF_INET, ipServidor.c_str(), &direccionSenal.sin_addr) <= 0) {
+      close(socketSenal);
+      throw runtime_error("Error en el inet_pton para finalizar el servidor.");
+    }
+    if (connect(socketSenal, (struct sockaddr *)&direccionSenal,
+                sizeof(direccionSenal)) < 0) {
+      close(socketSenal);
+      throw runtime_error(
+          "No se pudo conectar con el servidor para finalizarlo.");
+    }
+    close(socketSenal);
+
+    hiloAceptarConexiones.join();
+  }
+
   for (const auto &socket : socketsClientes) {
     close(socket);
   }
+  socketsClientes.clear();
+
   if (socketServidor != -1) {
     close(socketServidor);
+    socketServidor = -1;
   }
 
-  if (semServidor != SEM_FAILED) {
+  if (semServidor != nullptr && semServidor != SEM_FAILED) {
     sem_close(semServidor);
     sem_unlink(NOMBRE_SEM_SERVIDOR);
+    semServidor = nullptr;
   }
+  mutexAccesosCompartidos.unlock();
 }
 
 int Servidor::elegirPreguntaRandom(const vector<Pregunta> &preguntas) const {
@@ -342,45 +422,26 @@ void Servidor::manejadorFinDeServidor(int signo) {
 
   if (signo == SIGUSR1) {
 
-    instanciaServidor->liberarRecursos();
-
-    if (instanciaServidor->cantidadJugadoresConectados != 0) {
-      cout << "\033[31mEl servidor se cerró inesperadamente.\033[0m" << endl;
+    instanciaServidor->cerrar();
+    if (instanciaServidor->salaVacia()) {
+      cout << "\033[32mEl servidor se cerró exitosamente.\033[0m" << endl;
       exit(EXIT_FAILURE);
     } else {
-      cout << "\033[32mEl servidor se cerró exitosamente.\033[0m" << endl;
+      cout << "\033[31mEl servidor se cerró inesperadamente.\033[0m" << endl;
       exit(EXIT_SUCCESS);
     }
   }
 }
 
-void Servidor::confirmarPartida() {
-
-  bool confimarCliente = true;
-  for (const auto &sock : socketsClientes) {
-    TransmisionMensajes::enviarMensaje(sock, &confimarCliente, sizeof(bool));
-  }
-}
-
 void Servidor::reiniciar() {
+  mutexAccesosCompartidos.lock();
 
-  cantidadJugadoresConectados = 0;
-  /*for (auto &socket : socketsClientes) {
-    close(socket);
-  }*/
   socketsClientes.clear();
   puntajes.clear();
   socketClienteNickname.clear();
   preguntasSeleccionadas.clear();
   hilosClientes.clear();
+  cantidadJugadoresConectados = 0;
+
+  mutexAccesosCompartidos.unlock();
 }
-
-void Servidor::mostrarJugadoresConectados() const {
-  static int jugadoresConectadosUltVez = 0;
-
-  if (cantidadJugadoresConectados != jugadoresConectadosUltVez) {
-    jugadoresConectadosUltVez = cantidadJugadoresConectados;
-    cout << "Cantidad de jugadores en la sala: " << cantidadJugadoresConectados
-         << endl;
-  }
-};

@@ -1,7 +1,7 @@
 #include "file.hpp"
 #include "params.hpp"
 #include "question.hpp"
-#include "servidor.hpp"
+#include "server.hpp"
 
 using namespace std;
 
@@ -21,57 +21,45 @@ int main(int argc, const char *argv[]) {
     }
 
     // 2. Crear el servidor e inicializar el socket
-    Servidor servidor(parametros.getCantidadUsuarios(),
+    Servidor servidor(parametros.getPuerto(), parametros.getCantidadUsuarios(),
                       parametros.getCantidadPreguntas());
-    servidor.crearSocket(parametros.getPuerto(),
-                         parametros.getCantidadUsuarios());
+    servidor.crearSocket(parametros.getCantidadUsuarios());
 
     cout << "Servidor iniciado. Para finalizarlo usa 'kill -SIGUSR1 "
          << getpid() << "'." << endl;
 
-    // 3. Se inicia un ciclo infinito hasta que se identifique la señal -SIGUSR1
-
-    int socketCliente;
-    string nicknameCliente;
-
+    // 3. Se crea un hilo que aceptara o rechazara las conexiones de los
+    // clientes.
+    servidor.aceptarConexiones();
+    int cantPartidasJugadas = 1;
+    // 4. Se inicia un ciclo infinito hasta que se identifique la señal -SIGUSR1
     while (true) {
-      cout << "\nSala iniciada, esperando jugadores..." << endl;
-      // 4. Cargar preguntas al azar segun la cantidad ingresada por parametro
+
+      // 5. Cargar preguntas al azar segun la cantidad ingresada por parametro
       // al servidor
       servidor.cargarPreguntas(archivo.getPreguntas());
-
-      // 5. Ciclo principal: aceptar conexiones hasta que la sala esté llena
-
+      cout << "\nSala iniciada, esperando jugadores..." << endl;
+      // 6. Esperar a que se llene la sala o que se cierre el servidor.
       while (!servidor.salaLlena()) {
-
-        socketCliente = servidor.aceptarConexion();
-
-        nicknameCliente = servidor.obtenerNickname(socketCliente);
-        servidor.sacarClientesCaidos();
-
-        servidor.nicknameDuplicado(nicknameCliente)
-            ? servidor.rechazarNicknameDuplicado(socketCliente)
-            : servidor.confirmarConexion(socketCliente, nicknameCliente);
-
-        servidor.mostrarJugadoresConectados();
       }
 
-      // 6. Confirmar que la partida va a comenzar
-      servidor.confirmarPartida();
+      // 7. Verificar que el servidor no se haya cerrado.
 
-      // 7. Ejecutar el ciclo de juego
+      cout << "\n"
+           << string(10, '-') << " Mensajes del Servidor: Partida "
+           << cantPartidasJugadas++ << " " << string(10, '-') << endl;
+
+      // 8. Ejecutar el ciclo de juego
       servidor.jugar();
-
-      // 8. Manejar clientes caídos durante la partida
-      servidor.sacarClientesCaidos();
 
       // 9. Enviar los resultados de la partida
       servidor.enviarResultados();
-
       cout << "Partida finalizada." << endl;
-
+      cout << string(50, '-') << endl;
+      // 10. Reestablecer valores del servidor.
       servidor.reiniciar();
     }
+
   } catch (const ExcepcionAyuda &e) {
     cout << e.what() << endl;
   } catch (const std::exception &e) {
@@ -79,5 +67,5 @@ int main(int argc, const char *argv[]) {
     return EXIT_FAILURE; // En caso de error, devolver fallo
   }
 
-  return EXIT_SUCCESS; // Si todo salió bien, devolver éxito
+  return EXIT_SUCCESS;
 }

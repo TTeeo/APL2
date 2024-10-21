@@ -29,8 +29,6 @@ private:
       "LoteDePrueba/preguntas.txt "
       "--cantidad 3\n"
       "Consideraciones:\n"
-      "   -Solo soportamos la cantidad de 10 usuarios jugando "
-      "simultaneamente.\n"
       "   -Para cerrar el servidor puede usar la senal SIGUSR1.\n";
 
 public:

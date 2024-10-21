@@ -5,6 +5,8 @@
 #include "question.hpp"
 #include "utils.hpp"
 #include <algorithm>
+#include <arpa/inet.h>
+#include <atomic>
 #include <cerrno>
 #include <csignal>
 #include <cstdlib>
@@ -14,6 +16,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <netinet/in.h>
 #include <random>
 #include <semaphore.h>
@@ -32,18 +35,25 @@ using namespace std;
 
 class Servidor {
 private:
+  const int puertoUtilizado;
+  const int cantJugadoresMaximo;
+  const int cantPreguntasPorPartida;
+  const string ipServidor = "127.0.0.1";
+
   sem_t *semServidor = nullptr;
   int socketServidor = -1;
+  int socketSenal =
+      -1; // Su funcion es destrabar el accept() en el hilo aceptarConexiones.
   int cantidadJugadoresConectados = 0;
   vector<int> socketsClientes;
   vector<thread> hilosClientes;
-  const int cantJugadoresMaximo;
-  const int cantPreguntasPorPartida;
   vector<Pregunta> preguntasSeleccionadas;
   map<string, int> puntajes;
   map<int, string> socketClienteNickname;
-
+  thread hiloAceptarConexiones;
   static Servidor *instanciaServidor;
+  atomic<bool> finServidor = false;
+  mutex mutexAccesosCompartidos;
 
   void rechazarConexiones();
   void manejadorCliente(int sockCliente);
@@ -56,33 +66,39 @@ private:
   int calcularIteracionesParaEnviarResultados(size_t tamBuffer) const;
   void copiarResultados(char buffer[], vector<Resultado> &resultados,
                         int posDondeEmpezar, int cantResultadosACopiar) const;
-
-public:
-  Servidor() = default;
-  Servidor(int cantJugadores, int cantPreguntas);
-  void crearSocket(int puerto, int cantUsuariosMaximo);
-  // probar con const
-  int aceptarConexion();
-  static void manejadorFinDeServidor(int signo);
+  void aceptarConexion();
   void sacarClientesCaidos();
-  string obtenerNickname(int socketCliente) const;
-  void rechazarNicknameDuplicado(int socketCliente) const;
-
   void confirmarConexion(int socketCliente, string &nickname);
   bool nicknameDuplicado(const string &nicknameCliente) const;
+  void rechazarConexionPartidaEmpezada(int socketCliente) const;
+  void rechazarNicknameDuplicado(int socketCliente) const;
+  bool salaVacia() const { return cantidadJugadoresConectados == 0; }
+  bool partidaEmpezada() const {
+    return (int)puntajes.size() ==
+           cantJugadoresMaximo; // Utilizo puntajes ya que socketsClientes puede
+                                // < cantJugadoresMaximo debido a las
+                                // desconexiones.
+  }
+
+public:
+  Servidor(int puerto, int cantJugadores, int cantPreguntas);
+  void crearSocket(int cantUsuariosMaximo);
+
+  void aceptarConexiones() {
+    hiloAceptarConexiones = thread(&Servidor::aceptarConexion, this);
+  }
+
+  static void manejadorFinDeServidor(int signo);
+
   void jugar();
   bool salaLlena() const {
     return cantidadJugadoresConectados == cantJugadoresMaximo;
   }
   vector<Pregunta> getPreguntas() const { return preguntasSeleccionadas; }
   void cargarPreguntas(vector<Pregunta> preguntas);
-  void cargarPreguntas(const string nombreArchivo);
-  void enviarResultados() const;
-  void liberarRecursos() const;
-  void confirmarPartida();
+  void enviarResultados();
   void reiniciar();
-  void mostrarJugadoresConectados() const;
-  int getCantJugadores() const { return cantidadJugadoresConectados; }
-
-  ~Servidor();
+  bool debeCerrarse() const { return finServidor; }
+  void cerrar();
+  ~Servidor() { cerrar(); }
 };

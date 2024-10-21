@@ -30,7 +30,7 @@ typedef struct {
   char mensaje[TAM_MSJ_SERVIDOR];
   int codigoEstado;
 
-} ComunicacionNickname;
+} ComunicacionEstadoConexion;
 
 typedef struct {
 

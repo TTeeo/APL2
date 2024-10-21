@@ -8,6 +8,8 @@
 
 #define DATOS_NO_DISPONIBLES 0
 
+using namespace std;
+
 class TransmisionMensajes {
 
 public:

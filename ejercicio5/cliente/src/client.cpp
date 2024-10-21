@@ -1,4 +1,4 @@
-#include "cliente.hpp"
+#include "client.hpp"
 
 Cliente *Cliente::instanciaCliente = nullptr;
 
@@ -16,32 +16,37 @@ void Cliente::crearSocket(string ip, int puerto, string nickname) {
     throw runtime_error("No se pudo crear el socket");
   }
 
-  struct sockaddr_in server_address;
-  server_address.sin_family = AF_INET;
-  server_address.sin_port = htons(puerto);
-  inet_pton(AF_INET, ip.c_str(), &server_address.sin_addr);
+  struct sockaddr_in direccionServidor;
+  struct addrinfo hints, *resultado;
 
-  if (connect(descriptorSocket, (struct sockaddr *)&server_address,
-              sizeof(server_address)) < 0) {
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+
+  if (getaddrinfo(ip.c_str(), NULL, &hints, &resultado) != 0) {
+    close(descriptorSocket);
+    throw runtime_error(
+        "Error al resolver la dirección IP o el nombre de host");
+  }
+
+  memcpy(&direccionServidor, resultado->ai_addr, resultado->ai_addrlen);
+  direccionServidor.sin_port = htons(puerto); // Asignar el puerto
+
+  freeaddrinfo(resultado);
+
+  if (connect(descriptorSocket, (struct sockaddr *)&direccionServidor,
+              sizeof(direccionServidor)) < 0) {
     close(descriptorSocket);
     throw runtime_error("No se pudo conectar con el servidor.");
   }
 
-  bool barrera = false;
-  TransmisionMensajes::recibirMensaje(descriptorSocket, &barrera, sizeof(bool),
-                                      0);
-
-  if (barrera) {
-    throw runtime_error("La partida ya esta empezada.");
-  }
-
-  char nicknameChr[nickname.length() + 1];
+  char nicknameChr[TAM_NICKNAME];
   strcpy(nicknameChr, nickname.c_str());
 
   TransmisionMensajes::enviarMensaje(descriptorSocket, nicknameChr,
                                      sizeof(nicknameChr));
 
-  ComunicacionNickname comunicacion;
+  ComunicacionEstadoConexion comunicacion;
   TransmisionMensajes::recibirMensaje(descriptorSocket, &comunicacion,
                                       sizeof(comunicacion), 0);
 
@@ -55,18 +60,17 @@ int Cliente::obtenerRespuestaCliente() const {
   string respuesta;
   int numeroOpcion = -1;
 
-  do {
+  while (!esOpcionValida(numeroOpcion)) {
     cout << "Ingrese la opcion correcta[1-3]: ";
     cin >> respuesta;
 
     try {
       numeroOpcion = stoi(respuesta);
-
       if (!esOpcionValida(numeroOpcion)) {
-        cout
-            << "La opcion ingresada no es valida, por favor ingrese una opcion "
-               "correcta."
-            << endl;
+        cout << "La opcion ingresada no es valida, por favor ingrese una "
+                "opcion "
+                "correcta."
+             << endl;
       }
     } catch (const exception &) {
       cout << "La opcion ingresada no es un numero. Por favor, vuelva a "
@@ -74,8 +78,7 @@ int Cliente::obtenerRespuestaCliente() const {
            << endl;
       continue;
     }
-
-  } while (!esOpcionValida(numeroOpcion));
+  }
 
   return numeroOpcion;
 }
@@ -88,7 +91,6 @@ void Cliente::jugar() {
 
   MensajeServidor msjServidor;
   int respuesta;
-
   while (true) {
     TransmisionMensajes::recibirMensaje(descriptorSocket, &msjServidor,
                                         sizeof(MensajeServidor), 0);
@@ -115,6 +117,9 @@ vector<Resultado> Cliente::obtenerResultados() {
   int resultadosALeer;
   bool quedanMensajes;
   Resultado res;
+
+  // Estructura del mensaje: Cantidad resultados escritos en el buffer(int) +
+  // Faltan mas resultados por pasar(bool) + Envio de resultados (Resultado[])
   const char *inicioLecturaDatos = buffer + sizeof(int) + sizeof(bool);
   vector<Resultado> retorno;
 
@@ -135,10 +140,10 @@ vector<Resultado> Cliente::obtenerResultados() {
 }
 
 void Cliente::mostrarResultados(vector<Resultado> resultados) const {
-  cout << left; // Alinear a la izquierda
+  cout << left;
   cout << setw(10) << "Posición" << setw(TAM_NICKNAME) << "Jugador" << setw(10)
        << "Puntaje" << endl;
-  cout << string(81, '-') << endl; // Línea separadora
+  cout << string(81, '-') << endl;
 
   bool clienteGano = false;
 
@@ -165,44 +170,31 @@ void Cliente::mostrarPregunta(MensajeServidor &msjServidor) const {
     cout << opt << endl;
   }
 }
-bool Cliente::juegoListoParaIniciar() const {
-
-  bool clientesListos = false;
-
-  // No hay datos disponibles en este momento, pero la conexión sigue activa
-  if (TransmisionMensajes::recibirMensaje(descriptorSocket, &clientesListos,
-                                          sizeof(bool),
-                                          0) == DATOS_NO_DISPONIBLES) {
-    return false;
-  }
-  return clientesListos;
-}
 
 Cliente::~Cliente() {
 
   if (descriptorSocket != -1) {
-    if (errno != ECONNREFUSED) {
+    /*if (errno != ECONNREFUSED) {
       cout << "Conexión cerrada." << endl;
-    }
+    }*/
     close(descriptorSocket);
+    descriptorSocket = -1;
   }
 }
 void Cliente::cerrarSocket() {
 
   if (descriptorSocket != -1) {
     close(descriptorSocket);
+    descriptorSocket = -1;
   }
 }
 
 void Cliente::manejadorFinCliente(int signo) {
   if (signo == SIGUSR1) {
-    if (instanciaCliente->descriptorSocket != -1) {
-      close(instanciaCliente->descriptorSocket);
-    }
 
+    instanciaCliente->cerrarSocket();
     cout << "\033[31mEl cliente se cerro de manera inesperada.\033[0m"
          << std::endl;
-
     exit(EXIT_FAILURE);
   }
 }

@@ -1,4 +1,4 @@
-#include "cliente.hpp"
+#include "client.hpp"
 #include "params.hpp"
 
 #define COLOR_ROJO "\033[31m"
@@ -11,24 +11,20 @@ int main(int argc, char *argv[]) {
 
     Cliente cliente(parametros.getNickname());
 
-    cout << "Para finalizar el cliente usa 'kill -SIGUSR1 " << getpid() << "'."
-    << endl;
-    cout << "Esperando sala disponible..." << endl;
-
     cliente.crearSocket(parametros.getServidorIp(), parametros.getPuerto(),
                         parametros.getNickname());
-
+    cout << "Para finalizar el cliente usa 'kill -SIGUSR1 " << getpid() << "'."
+         << endl;
     cout << "\nSe ha ingresado a la sala, cuando haya suficientes jugadores se "
             "iniciara el juego."
          << endl;
 
-    while (!cliente.juegoListoParaIniciar()) {
-    }
     cliente.jugar();
 
     cout << "Aguardando que todos los jugadores terminen la partida..." << endl;
 
     cliente.mostrarResultados(cliente.obtenerResultados());
+    cliente.cerrarSocket();
   }
 
   catch (const exception &e) {

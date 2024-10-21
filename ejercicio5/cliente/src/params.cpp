@@ -10,7 +10,6 @@ Parametros::Parametros(int argc, char *argv[]) {
   };
   nickname = "";
   servidorIp = "";
-  puerto = -1;
 
   int indiceOpcion = 0, opt;
   if (argc != CANT_ARGS_AYUDA && argc != CANT_ARGS_ESPERADOS) {
@@ -56,10 +55,6 @@ Parametros::Parametros(int argc, char *argv[]) {
   if (servidorIp.empty()) {
     throw invalid_argument("Error: El parámetro -s / --servidor es requerido.");
   }
-
-  if (puerto == -1) {
-    throw invalid_argument("Error: El parámetro -p / --puerto es requerido.");
-  }
 }
 
 void Parametros::mostrarAyuda() const {
@@ -76,5 +71,8 @@ void Parametros::mostrarAyuda() const {
           "127.0.0.1\n"
        << "Consideraciones:\n"
        << "   -Para cerrar el cliente puede usar la senal SIGUSR1.\n"
+       << "   -Para conectarse al servidor la direccion ip \"127.0.0.1\" o "
+          "localhost.\n"
+       << "   -El puerto a utlizar debe ser el mismo que uso en el servidor.\n"
        << endl;
 }

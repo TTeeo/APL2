@@ -8,6 +8,7 @@
 #define TAM_BUFFER 1024
 #define COMUNICACION_NICKNAME_EXITO 0
 #define COMUNICACION_NICKNAME_DUPLICADO 1
+#define COMUNICACION_PARTIDA_EMPEZADA 2
 
 typedef struct {
 
@@ -30,7 +31,7 @@ typedef struct {
   char mensaje[TAM_MSJ_SERVIDOR];
   int codigoEstado;
 
-} ComunicacionNickname;
+} ComunicacionEstadoConexion;
 
 typedef struct {
 
