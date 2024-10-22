@@ -1,26 +1,36 @@
 #include "file.hpp"
 
-vector<Pregunta> Archivo::obtenerPreguntas(string rutaArchivo) {
+string Archivo::rutaArchivo = "";
+vector<Pregunta> Archivo::preguntas;
 
-  filesystem::path ruta(rutaArchivo);
+vector<Pregunta> Archivo::obtenerPreguntas(string rutaArchParam) {
+
+  if (rutaArchParam == rutaArchivo) {
+    return preguntas;
+  }
+
+  filesystem::path ruta(rutaArchParam);
   ifstream archivo(ruta);
 
   if (!archivo.is_open()) {
     throw runtime_error("Error: No se pudo abrir el archivo " +
                         ruta.filename().string());
   }
-  vector<Pregunta> preguntas;
+
   Pregunta preg;
   string linea;
+
   while (getline(archivo, linea)) {
     try {
       preg = parsearLinea(linea);
       preguntas.emplace_back(preg);
+
     } catch (exception &e) {
       throw runtime_error("Error: No se pudo parsear la linea " + linea);
     }
   }
 
+  rutaArchivo = rutaArchParam;
   return preguntas;
 }
 
@@ -38,22 +48,11 @@ Pregunta Archivo::parsearLinea(const string &linea) {
   return Pregunta(preg, stoi(optCorrecta), opts);
 }
 
-int Archivo::obtenerPreguntasDisponibles(string nombreArchivo) {
+bool Archivo::preguntasInsuficientes(string rutaArchParam,
+                                     int preguntasIngresadas) {
 
-  ifstream archivo(nombreArchivo);
-
-  if (!archivo.is_open()) {
-    throw runtime_error("Error: No se pudo abrir el archivo " + nombreArchivo);
+  if (rutaArchParam != rutaArchivo) {
+    obtenerPreguntas(rutaArchParam);
   }
-
-  int contador = 0;
-  string linea;
-
-  while (getline(archivo, linea)) {
-    contador++;
-  }
-
-  archivo.close();
-
-  return contador;
+  return (int)preguntas.size() > preguntasIngresadas ? true : false;
 }

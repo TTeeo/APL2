@@ -39,7 +39,9 @@ void Parametros::mostrarAyuda() const {
   cout << "Parámetros del cliente:\n";
   cout << "-n / --nickname   Nickname del usuario (Requerido).\n";
   cout << "-h / --help       Muestra la ayuda del ejercicio.\n";
-  cout << "Descripción: El cliente se encargará de mostrar las preguntas "
-          "al jugador y registrar sus respuestas, comunicándose con el "
-          "servidor.\n\n";
+
+  cout << "\033[34mConsideraciones:\033[0m\n"; // Título en azul
+  cout << "-Puede cerrar el cliente durante la partida con SIGUSR1 si lo "
+          "necesitase."
+       << endl;
 }

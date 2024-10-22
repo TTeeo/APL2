@@ -14,13 +14,28 @@ int main(int argc, char **argv) {
     servidor.iniciar();
 
     // Mostrar el PID del proceso
-    cout << "Servidor iniciado. Para cerrarlo ingrese en otra consola 'kill -SIGUSR1 "<< getpid() << "'." << endl;
+    cout << "Servidor iniciado. Para cerrarlo ingrese en otra consola 'kill "
+            "-SIGUSR1 "
+         << getpid() << "'." << endl;
 
     // Bucle principal del servidor
-    while (!servidor.cerrar()) {
+    while (true) {
       cout << "Esperando al cliente..." << endl;
-      servidor.jugar();
+      pause();
+      if (servidor.cerrar()) {
+        break;
+      }
+
+      cout << "Cliente conectado. Se iniciara la partida" << endl;
+      try {
+        servidor.jugar();
+      } catch (const runtime_error &e) {
+        cout << "\033[31m" << e.what() << "\033[0m" << endl;
+      }
     }
+
+    cout << "Cerrando servidor..." << endl;
+    servidor.liberarRecursos();
 
     return EXIT_SUCCESS;
   } catch (const exception &e) {

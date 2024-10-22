@@ -6,6 +6,6 @@ ostream &operator<<(ostream &os, const Pregunta &pregunta) {
     os << "- " << opcion << "\n";
   }
   os << "Respuesta Correcta: "
-     << pregunta.getOpcionSegunPosicion(pregunta.getOpcionCorrecta());
+     << pregunta.getOpcionSegunPosicion(pregunta.getOpcionCorrecta() - 1);
   return os;
 }

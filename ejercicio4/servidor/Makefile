@@ -1,6 +1,6 @@
 CXX = g++
 CXXFLAGS = -Wall -Wextra -std=c++20 -Iinclude
-TARGET = bin/ejercicio4.exe
+TARGET = bin/server.exe
 SOURCES = src/main.cpp src/params.cpp src/file.cpp src/question.cpp src/server.cpp
 OBJECTS = $(patsubst src/%.cpp, obj/%.o, $(SOURCES))
 

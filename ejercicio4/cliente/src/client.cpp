@@ -1,8 +1,10 @@
-#include "cliente.hpp"
+#include "client.hpp"
+
+Cliente *Cliente::instanciaCliente = nullptr;
 
 void Cliente::iniciar() {
 
-  if(!filesystem::exists(PATH_SHMFILE)){
+  if (!filesystem::exists(PATH_SHMFILE)) {
     throw runtime_error("Error: No hay un servidor ejecutándose.");
   }
 
@@ -33,20 +35,54 @@ void Cliente::iniciar() {
   if (this->datos == (DatosCompartidos *)-1) {
     throw runtime_error("Error: No se pudo adjuntar la memoria compartida.");
   }
-
+  instanciaCliente = this;
   signal(SIGINT, SIG_IGN);
-  signal(SIGTERM, SIG_IGN); 
+  signal(SIGTERM, SIG_IGN);
+  signal(SIGUSR1, Cliente::manejadorCierreInesperado);
+
+  despertarServidor();
+}
+
+void Cliente::despertarServidor() const {
+
+  if (filesystem::exists(nombreArchPidServidor)) {
+    ifstream archivoPid(nombreArchPidServidor);
+    pid_t pidServidor;
+
+    if (archivoPid.is_open()) {
+      archivoPid >> pidServidor;
+      archivoPid.close();
+    } else {
+      throw runtime_error(
+          "No se pudo abrir el archivo con el PID del servidor.");
+    }
+    if (kill(pidServidor, SIGUSR2) != 0) {
+      throw runtime_error("Error al enviar la señal al servidor.");
+    }
+  } else {
+    throw runtime_error(
+        "No se pudo obtener el archivo con el PID del servidor.");
+  }
+}
+
+void Cliente::manejadorCierreInesperado(int signo) {
+
+  if (SIGUSR1 == signo) {
+    if (instanciaCliente != nullptr)
+      instanciaCliente->cerrarCliente = true;
+  }
 }
 
 void Cliente::liberarSemaforos() {
-  if (this->semCliente != SEM_FAILED) {
+  if (this->semCliente != nullptr && this->semCliente != SEM_FAILED) {
     sem_close(this->semCliente);
   }
 
-  if (this->semServidor != SEM_FAILED) {
+  if (this->semServidor != nullptr && this->semServidor != SEM_FAILED) {
     sem_close(this->semServidor);
   }
-  if (this->semBloqueoClientes != SEM_FAILED) {
+  if (this->semBloqueoClientes != nullptr &&
+      this->semBloqueoClientes != SEM_FAILED) {
     sem_close(this->semBloqueoClientes);
     sem_unlink(this->NOMBRE_SEM_ENTRE_CLIENTES);
   }
@@ -63,27 +99,24 @@ int Cliente::obtenerRespuestaCliente() const {
   string respuesta;
   int numeroOpcion = -1;
 
-  do {
+  while (!esOpcionValida(numeroOpcion)) {
     cout << "\nIngrese la opcion correcta [1-3]: ";
     cin >> respuesta;
 
     try {
       numeroOpcion = stoi(respuesta);
 
-      if(!esOpcionValida(numeroOpcion)) {
-      cout << "La opcion ingresada no es valida. Por favor, vuelva a "
-              "intentar."
-           << endl;
-    }
-
+      if (!esOpcionValida(numeroOpcion)) {
+        cout << "La opcion ingresada no es valida. Por favor, vuelva a "
+                "intentar."
+             << endl;
+      }
     } catch (const exception &) {
       cout << "La opcion ingresada no es un numero. Por favor, vuelva a "
               "intentar."
            << endl;
     }
-
-  } while (!esOpcionValida(numeroOpcion));
-
+  }
   return numeroOpcion;
 }
 
@@ -93,8 +126,13 @@ bool Cliente::esOpcionValida(int opcion) const {
 int Cliente::jugar() const {
   enviar();
   int respuesta;
-  while (true) {
+
+  this->datos->partidaEnCurso = true;
+  this->datos->cierreInesperado = false;
+
+  while (this->datos->partidaEnCurso && !this->datos->cierreInesperado) {
     esperar();
+
     if (!this->datos->partidaEnCurso) {
       break;
     }
@@ -102,7 +140,15 @@ int Cliente::jugar() const {
     mostrarPreguntaYOpciones();
     respuesta = obtenerRespuestaCliente();
     this->datos->respuestaCliente = respuesta;
+
+    if (cerrar()) {
+      this->datos->cierreInesperado = true;
+    }
     enviar();
+  }
+
+  if (this->datos->cierreInesperado) {
+    throw runtime_error("El cliente se ha desconectado durante la partida.");
   }
   cout << this->datos->mensajeServidor << endl;
   return this->datos->puntajeFinal;

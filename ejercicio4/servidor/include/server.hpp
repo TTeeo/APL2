@@ -22,24 +22,26 @@ using namespace std;
 class Servidor {
 
 private:
-  sem_t *semServidor = SEM_FAILED, *semCliente = SEM_FAILED;
+  sem_t *semServidor = nullptr, *semCliente = nullptr;
   int shmId = -1;
   DatosCompartidos *datos = (DatosCompartidos *)-1;
 
-  vector<Pregunta> preguntas;
+  const vector<Pregunta> preguntas;
+  vector<Pregunta> copiaPreguntas;
   int cantPreguntasPorPartida;
-  static bool clienteJugando;
   static bool ordenFinDeServidor;
   static Servidor *instaciaServidor;
   // static void manejarSIGUSR1(int signal);
   // static void ignorarSIGINT([[maybe_unused]] int signal);
 
   key_t crearClaveParaMemCompartida();
-  void liberarRecursos();
   void liberarSemaforos();
   Pregunta elegirPreguntaRandom();
   void enviar() { sem_post(this->semServidor); }
   void esperar() { sem_wait(this->semCliente); }
+  void inicializarDatosCompartidos();
+  bool clienteAcerto(Pregunta &preg);
+  void escribirPid() const;
 
 public:
   Servidor(vector<Pregunta> pregs, int cantPreguntas)
@@ -47,7 +49,9 @@ public:
   void iniciar();
   void jugar();
   static void manejadorSenalFinServidor(int signo);
+  static void manejadorConexionCliente(int signo) { (void)signo; }
   bool cerrar() const { return Servidor::ordenFinDeServidor; }
+  void liberarRecursos();
 
   ~Servidor() { liberarRecursos(); }
 };

@@ -1,8 +1,8 @@
 # Definición de variables
 CXX = g++
 CXXFLAGS = -Wall -Wextra -std=c++20 -Iinclude
-TARGET = bin/ejercicio4.exe
-SOURCES = src/main.cpp src/params.cpp src/cliente.cpp
+TARGET = bin/client.exe
+SOURCES = src/main.cpp src/params.cpp src/client.cpp
 OBJECTS = $(patsubst src/%.cpp, obj/%.o, $(SOURCES))
 
 # Regla por defecto

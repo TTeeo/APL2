@@ -1,4 +1,4 @@
-#include "cliente.hpp"
+#include "client.hpp"
 #include "params.hpp"
 #include <iostream>
 
@@ -6,18 +6,19 @@ using namespace std;
 
 int main(int argc, const char *argv[]) {
   try {
-    
-    Parametros params(argc - 1, argv + 1);
 
-    //cout << "PID: " << getpid() << endl;
+    Parametros params(argc - 1, argv + 1);
 
     Cliente cliente;
     cliente.iniciar();
-
+    cout << "Cliente iniciado. Si lo desea puede cerrarlo usando: 'kill "
+            "-SIGUSR1 "
+         << getpid() << "'." << endl;
     int puntaje = cliente.jugar();
+
     cout << "Muchas gracias por jugar con nosotros "
-        << params.getNombreUsuario() << "! Su puntaje fue de: " << puntaje
-        << ". Hasta la proxima!" << endl;
+         << params.getNombreUsuario() << "! Su puntaje fue de: " << puntaje
+         << ". Hasta la proxima!" << endl;
 
     return EXIT_SUCCESS;
 

@@ -60,8 +60,7 @@ EstadoParametro Parametros::validarParametroCantidad(const string &arg,
     return EstadoParametro::NumeroFueraDeRango;
   }
   return numero > 0
-             ? numero <=
-                       Archivo::obtenerPreguntasDisponibles(getNombreArchivo())
+             ? Archivo::preguntasInsuficientes(getNombreArchivo(), numero)
                    ? EstadoParametro::Exito
                    : EstadoParametro::CantidadSuperaPreguntasDisponibles
              : EstadoParametro::NoEsUnNumeroPositivo;
@@ -106,8 +105,10 @@ void Parametros::procesarArgumentos(string &paramArchivo, string &archivo,
     break;
 
   case EstadoParametro::CantidadSuperaPreguntasDisponibles:
-    throw invalid_argument(
-        "Error: No disponemos de la cantidad de preguntas solicitadas.");
+    throw invalid_argument("Error: No disponemos de la cantidad de preguntas "
+                           "solicitadas. Solamente disponemos de " +
+                           to_string(Archivo::getCantidadPreguntas()) +
+                           " preguntas");
 
     break;
   default:
@@ -126,7 +127,6 @@ bool Parametros::seSolicitoAyuda(int argc, char *argv[]) {
   return !pedido_ayuda.compare("-h") || !pedido_ayuda.compare("--help") ? true
                                                                         : false;
 }
-
 
 void Parametros::mostrarAyuda() const {
 

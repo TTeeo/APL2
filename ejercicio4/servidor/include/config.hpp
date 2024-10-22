@@ -8,6 +8,7 @@ const string PATH_SHMFILE = "/tmp/shmfile";
 const int PROJECT_ID = 66;
 const string NOMBRE_SEM_CLIENTE = "/semaforo_cliente";
 const string NOMBRE_SEM_SERVIDOR = "/semaforo_servidor";
+const string nombreArchPidServidor = "/tmp/servidor_pid";
 
 #define TAM_PREGUNTA 512
 #define TAM_OPCION 256
@@ -21,5 +22,6 @@ typedef struct {
   int respuestaCliente;
   int puntajeFinal;
   bool partidaEnCurso;
+  bool cierreInesperado;
 
 } DatosCompartidos;
